@@ -1,0 +1,65 @@
+{
+  "name": "mcp-sub-registry-monorepo",
+  "version": "1.0.0",
+  "description": "MCP-compliant enterprise sub-registry with backend API and web UI",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",
+    "dev:api": "npm run dev --workspace=packages/api",
+    "dev:ui": "npm run dev --workspace=packages/ui",
+    "build": "npm run build --workspace=packages/api && npm run build --workspace=packages/ui",
+    "build:api": "npm run build --workspace=packages/api",
+    "build:ui": "npm run build --workspace=packages/ui",
+    "test": "npm run test --workspaces --if-present",
+    "test:api": "npm run test --workspace=packages/api",
+    "test:ui": "npm run test --workspace=packages/ui",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rimraf dist node_modules/.cache",
+    "generate": "npm run generate:client",
+    "generate:client": "./tools/scripts/generate-client.sh",
+    "setup": "./tools/scripts/dev-setup.sh",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "db:generate": "npm run db:generate --workspace=packages/api",
+    "db:push": "npm run db:push --workspace=packages/api",
+    "db:migrate": "npm run db:migrate --workspace=packages/api",
+    "db:studio": "npm run db:studio --workspace=packages/api"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.7.4",
+    "@typescript-eslint/parser": "^6.7.4",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.50.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "openapi-typescript-codegen": "^0.25.0",
+    "playwright": "^1.55.0",
+    "prettier": "^3.0.3",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "author": "Platform Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/company/mcp-sub-registry.git"
+  },
+  "keywords": [
+    "mcp",
+    "registry",
+    "enterprise",
+    "api",
+    "ui",
+    "monorepo"
+  ]
+}

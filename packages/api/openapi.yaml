@@ -1,0 +1,936 @@
+openapi: 3.0.3
+info:
+  title: MCP Sub-Registry API
+  description: Enterprise Model Context Protocol (MCP) sub-registry for server discovery and governance
+  version: 1.0.0
+  contact:
+    name: Platform Team
+    email: platform@company.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3010
+    description: Development server
+  - url: https://mcp-registry.company.com
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+  - {}
+
+tags:
+  - name: Servers
+    description: MCP server registry operations
+  - name: Authentication
+    description: User authentication and authorization
+  - name: API Keys
+    description: API key management
+  - name: Health
+    description: Health checks and monitoring
+
+paths:
+  # MCP Server Registry Endpoints
+  /v0/servers:
+    get:
+      tags: [Servers]
+      summary: List MCP servers
+      description: Retrieve a paginated list of MCP servers with optional filtering
+      security:
+        - {}
+        - ApiKeyAuth: [read]
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of servers to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          description: Number of servers to skip for pagination
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: status
+          in: query
+          description: Filter servers by status
+          schema:
+            $ref: '#/components/schemas/ServerStatus'
+        - name: search
+          in: query
+          description: Search servers by name or description
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of servers retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerListResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v0/servers/{id}:
+    get:
+      tags: [Servers]
+      summary: Get server by ID
+      description: Retrieve detailed information about a specific MCP server
+      security:
+        - {}
+        - ApiKeyAuth: [read]
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Server unique identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Server details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        '404':
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v0/publish:
+    post:
+      tags: [Servers]
+      summary: Publish MCP server
+      description: Register a new MCP server in the registry
+      security:
+        - ApiKeyAuth: [publish]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishServerRequest'
+      responses:
+        '201':
+          description: Server published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Server name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v0/health:
+    get:
+      tags: [Health]
+      summary: MCP API health check
+      description: Check the health status of the MCP v0 API endpoints
+      security:
+        - {}
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPHealthResponse'
+
+  # Authentication Endpoints
+  /api/v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register admin user
+      description: Register a new admin user (restricted endpoint)
+      security:
+        - {}
+      parameters:
+        - name: x-admin-key
+          in: header
+          description: Admin setup key for user registration
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid request data or user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Registration disabled or invalid admin key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      description: Authenticate user and receive JWT token
+      security:
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      description: Retrieve current authenticated user information
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # API Key Management
+  /api/v1/api-keys/create:
+    post:
+      tags: [API Keys]
+      summary: Create API key
+      description: Generate a new API key with specified scopes and expiration
+      security:
+        - BearerAuth: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyWithSecret'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      description: Retrieve a list of API keys for the current user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: active
+          in: query
+          description: Filter by active status
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: API keys retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys/{id}:
+    get:
+      tags: [API Keys]
+      summary: Get API key by ID
+      description: Retrieve details of a specific API key
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: API key details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKey'
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags: [API Keys]
+      summary: Update API key
+      description: Update API key name, description, or active status
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApiKeyRequest'
+      responses:
+        '200':
+          description: API key updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKey'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [API Keys]
+      summary: Delete API key
+      description: Permanently delete an API key
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: API key deleted successfully
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Health and Monitoring
+  /health:
+    get:
+      tags: [Health]
+      summary: Basic health check
+      description: Basic infrastructure health check for load balancers
+      security:
+        - {}
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Retrieve Prometheus-compatible metrics for monitoring
+      security:
+        - {}
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                description: Prometheus metrics in text format
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for user authentication
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: API key authentication using "ApiKey <key>" format
+
+  schemas:
+    # Core MCP Server Types
+    MCPServer:
+      type: object
+      required: [id, name, description, version, status]
+      properties:
+        id:
+          type: string
+          description: Unique server identifier
+        name:
+          type: string
+          description: Server name in reverse DNS format
+          example: com.company.mcp-server
+        description:
+          type: string
+          description: Human-readable server description
+        version:
+          type: string
+          description: Semantic version
+          example: 1.0.0
+        status:
+          $ref: '#/components/schemas/ServerStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        repository:
+          $ref: '#/components/schemas/Repository'
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Package'
+        remote:
+          $ref: '#/components/schemas/RemoteConfig'
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional server metadata
+
+    ServerStatus:
+      type: string
+      enum: [experimental, beta, stable, deprecated]
+      description: Server development and deployment status
+
+    Repository:
+      type: object
+      required: [type, url]
+      properties:
+        type:
+          type: string
+          enum: [git, mercurial, svn]
+        url:
+          type: string
+          format: uri
+        branch:
+          type: string
+        tag:
+          type: string
+        commit:
+          type: string
+
+    Package:
+      type: object
+      required: [registry, identifier, version]
+      properties:
+        registry:
+          type: string
+          enum: [npm, pypi, maven, docker, cargo, gem]
+        identifier:
+          type: string
+          description: Package identifier in the registry
+        version:
+          type: string
+          description: Package version
+        url:
+          type: string
+          format: uri
+          description: Direct download URL
+
+    RemoteConfig:
+      type: object
+      required: [transport]
+      properties:
+        transport:
+          type: string
+          enum: [stdio, http, https, tcp, websocket]
+        url:
+          type: string
+          format: uri
+        host:
+          type: string
+        port:
+          type: integer
+        path:
+          type: string
+
+    # Request/Response Types
+    PublishServerRequest:
+      type: object
+      required: [name, description, version, status]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$'
+          description: Server name in reverse DNS format
+        description:
+          type: string
+          minLength: 10
+          maxLength: 500
+        version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+(-[\w\d\-_]+)?(\+[\w\d\-_]+)?$'
+          description: Semantic version
+        status:
+          $ref: '#/components/schemas/ServerStatus'
+        repository:
+          $ref: '#/components/schemas/Repository'
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Package'
+        remote:
+          $ref: '#/components/schemas/RemoteConfig'
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ServerListResponse:
+      type: object
+      required: [servers, pagination]
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPServer'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    PaginationInfo:
+      type: object
+      required: [total, limit, offset, has_more]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+
+    # Authentication Types
+    User:
+      type: object
+      required: [id, email, username, roles, is_active, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [admin, publisher, reader]
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UserRegisterRequest:
+      type: object
+      required: [email, username, password]
+      properties:
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    UserLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT token for authentication
+        user:
+          $ref: '#/components/schemas/User'
+        message:
+          type: string
+
+    # API Key Types
+    ApiKey:
+      type: object
+      required: [id, name, scopes, expires_at, created_at, is_active, user]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [read, publish, admin]
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_used:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            username:
+              type: string
+
+    ApiKeyWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          required: [key]
+          properties:
+            key:
+              type: string
+              description: The actual API key (only returned on creation)
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [read, publish, admin]
+          default: [read]
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+
+    UpdateApiKeyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        is_active:
+          type: boolean
+
+    ApiKeyListResponse:
+      type: object
+      required: [api_keys, pagination]
+      properties:
+        api_keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    # Health Types
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        timestamp:
+          type: string
+          format: date-time
+
+    MCPHealthResponse:
+      type: object
+      required: [status, timestamp, version]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    # Error Types
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable error code
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidationError:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Validation error message
+        code:
+          type: string
+          description: Error code (typically VALIDATION_ERROR)
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string

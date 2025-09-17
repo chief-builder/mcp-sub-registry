@@ -1,0 +1,171 @@
+// MCP-Compliant Prisma schema for Enterprise Sub-Registry
+// Based on official MCP Registry API specification v2025-07-09
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// MCP Server model - follows official MCP Registry specification
+model Server {
+  id           String   @id @default(cuid())
+  
+  // Core MCP fields (required)
+  name         String   @unique  // e.g., "com.company.service-name"
+  description  String
+  status       String   @default("experimental") // active, experimental, deprecated
+  version      String   
+  
+  // Repository information (optional)
+  repository   Json?    // {type: "git", url: "https://git.company.com/..."}
+  
+  // Package information (optional) 
+  packages     Json[]   @default([]) // [{registry: "npm", identifier: "@company/service", version: "1.0.0"}]
+  
+  // Remote connection details (optional)
+  remote       Json?    // {transport: "stdio", url: "npx @company/service"}
+  
+  // Extensible metadata (enterprise-specific fields via reverse DNS namespacing)
+  metadata     Json     @default("{}") // {"com.company.enterprise": {owner: "team", tier: 1, ...}}
+  
+  // Internal tracking fields
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  
+  @@index([name])
+  @@index([status])
+  @@index([created_at])
+  @@index([updated_at])
+  @@map("mcp_servers")
+}
+
+// User model for authentication and ownership tracking
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String    @unique
+  password_hash String?   
+  
+  // Authentication providers
+  auth_provider String    @default("internal") // internal, saml, oidc, api_key
+  external_id   String?   // ID from external auth provider
+  
+  // User permissions and roles
+  roles         String[]  @default(["consumer"]) // consumer, publisher, approver, admin
+  is_active     Boolean   @default(true)
+  
+  // Enterprise metadata
+  metadata      Json      @default("{}") // Department, team, etc.
+  
+  // Timestamps
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  last_login    DateTime?
+  
+  // Relations
+  api_keys      ApiKey[]
+  namespaces    Namespace[]
+  audit_logs    AuditLog[]
+  
+  @@index([email])
+  @@index([auth_provider, external_id])
+  @@index([is_active])
+  @@map("users")
+}
+
+// API Keys for service-to-service authentication
+model ApiKey {
+  id           String   @id @default(cuid())
+  key_hash     String   @unique
+  name         String   // Human-readable name for the key
+  description  String?
+  
+  // Associated user/service
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  // Key permissions
+  scopes       String[] // read, write, publish, admin
+  
+  // Key lifecycle
+  is_active    Boolean  @default(true)
+  expires_at   DateTime?
+  last_used    DateTime?
+  
+  // Metadata
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  
+  // Relations
+  audit_logs   AuditLog[]
+  
+  @@index([key_hash])
+  @@index([user_id])
+  @@index([is_active])
+  @@map("api_keys")
+}
+
+// Namespace ownership and permissions
+model Namespace {
+  id           String   @id @default(cuid())
+  name         String   @unique // e.g., "com.company.customer"
+  
+  // Ownership
+  owner_id     String
+  owner        User     @relation(fields: [owner_id], references: [id])
+  
+  // Additional authorized users/teams
+  authorized_users String[] @default([])
+  
+  // Verification for external namespaces
+  verification_method String? // dns, http, none (for internal)
+  verification_data   Json?   // Verification tokens, DNS records, etc.
+  is_verified         Boolean @default(true) // Internal namespaces are auto-verified
+  
+  // Metadata
+  metadata     Json     @default("{}")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  
+  @@index([name])
+  @@index([owner_id])
+  @@map("namespaces")
+}
+
+// Audit trail for all registry operations
+model AuditLog {
+  id           String   @id @default(cuid())
+  
+  // Event details
+  action       String   // publish, update, delete, approve, reject
+  resource_type String  // server, user, namespace
+  resource_id  String   
+  
+  // Actor information
+  user_id      String?
+  user         User?    @relation(fields: [user_id], references: [id])
+  api_key_id   String?
+  api_key      ApiKey?  @relation(fields: [api_key_id], references: [id])
+  
+  // Request context
+  ip_address   String?
+  user_agent   String?
+  
+  // Change details
+  old_values   Json?    // Previous state
+  new_values   Json?    // New state
+  metadata     Json     @default("{}")
+  
+  // Timestamp
+  created_at   DateTime @default(now())
+  
+  @@index([user_id])
+  @@index([action])
+  @@index([resource_type, resource_id])
+  @@index([created_at])
+  @@map("audit_logs")
+}
