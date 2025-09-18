@@ -136,6 +136,7 @@ npm run docker:down
 - **[Deployment Guide](docs/deployment/README.md)** - Production deployment
 - **[Demo Walkthrough](docs/demo/README.md)** - Interactive demonstration
 - **[Test Documentation](tests/playwright/playwright-test-readme.md)** - E2E test suite
+- **[MCP Registry White Paper](docs/MCP-Registry-White-Paper.md)** - Technical specification and implementation guide
 
 ## 🔐 Security
 
