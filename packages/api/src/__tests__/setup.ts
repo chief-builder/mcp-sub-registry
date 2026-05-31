@@ -12,6 +12,7 @@ process.env.DATABASE_URL = 'postgresql://postgres:postgres123@localhost:5435/mcp
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { resetMaintenanceCache } from '../middleware/maintenance';
 
 // Global test database instance
 declare global {
@@ -158,6 +159,7 @@ export const testUtils = {
     await prisma.namespace.deleteMany({}); // releases owner_id references
     await prisma.setting.deleteMany({});
     await prisma.user.deleteMany({});
+    resetMaintenanceCache(); // settings just cleared — drop any cached flag
   },
 
   /**

@@ -135,4 +135,28 @@ describe('Admin user & settings endpoints', () => {
       await request(app).put('/api/v1/settings').set(admin.headers).send({}).expect(400);
     });
   });
+
+  describe('Maintenance mode enforcement', () => {
+    it('blocks non-admins (503) when enabled, lets admins and health through, and lifts on disable', async () => {
+      // Off by default: public listing works.
+      await request(app).get('/v0.1/servers').expect(200);
+
+      // Enable maintenance.
+      await request(app).put('/api/v1/settings').set(admin.headers).send({ maintenanceMode: true }).expect(200);
+
+      // Public/non-admin requests are now blocked.
+      await request(app).get('/v0.1/servers').expect(503)
+        .expect((res) => expect(res.body).toMatchObject({ code: 'MAINTENANCE_MODE' }));
+      const reader = await testUtils.createJwtAuth(['reader']);
+      await request(app).get('/v0.1/servers').set(reader.headers).expect(503);
+
+      // Admins and health remain available.
+      await request(app).get('/v0.1/servers').set(admin.headers).expect(200);
+      await request(app).get('/v0.1/health').expect(200);
+
+      // Disable maintenance -> public access restored.
+      await request(app).put('/api/v1/settings').set(admin.headers).send({ maintenanceMode: false }).expect(200);
+      await request(app).get('/v0.1/servers').expect(200);
+    });
+  });
 });

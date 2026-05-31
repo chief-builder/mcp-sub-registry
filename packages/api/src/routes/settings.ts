@@ -3,6 +3,7 @@ import { prisma } from '../db';
 import { logger } from '../utils/logger';
 import { authenticate } from '../middleware/auth';
 import { validateBody, settingsUpdateSchema, DEFAULT_SETTINGS } from '../middleware/validation';
+import { resetMaintenanceCache } from '../middleware/maintenance';
 import { AuthenticatedRequest } from '../types';
 
 const router = Router();
@@ -42,6 +43,9 @@ router.put('/', adminOnly, validateBody(settingsUpdateSchema), async (req: Authe
         })
       )
     );
+
+    // Apply newly-saved enforcement settings immediately.
+    resetMaintenanceCache();
 
     try {
       await prisma.auditLog.create({

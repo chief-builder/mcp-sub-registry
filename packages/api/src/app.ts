@@ -5,6 +5,7 @@ import compression from 'compression';
 import { logger } from './utils/logger';
 import { isProduction } from './config';
 import { globalRateLimit } from './middleware/security';
+import { maintenanceGuard } from './middleware/maintenance';
 
 import v0_1Routes from './routes/v0_1';
 import metricsRoutes from './routes/metrics';
@@ -49,6 +50,9 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Enforce maintenance mode (admin-only access when enabled).
+app.use(maintenanceGuard());
 
 // Routes
 app.use('/v0.1', v0_1Routes);
