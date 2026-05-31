@@ -1,61 +1,29 @@
 import { Request } from 'express';
 import { ParsedQs } from 'qs';
+import {
+  ServerDetail,
+  ServerResponse,
+  ServerListResponse,
+  ServerRegistryStatus,
+} from './mcp';
 
-// Server-related types
-export interface ServerPublishRequest {
-  name: string;
-  description: string;
-  version: string;
-  status?: 'experimental' | 'beta' | 'stable' | 'deprecated';
-  repository?: {
-    type: string;
-    url: string;
-  };
-  packages?: Array<{
-    registry: string;
-    identifier: string;
-    version?: string;
-  }>;
-  remote?: {
-    transport: string;
-    url?: string;
-  };
-  metadata?: Record<string, any>;
+// A publish request body is a full server.json document (ServerDetail).
+export type ServerPublishRequest = ServerDetail;
+
+// Status update request for the PATCH .../status endpoints.
+export interface StatusUpdateRequest {
+  status: ServerRegistryStatus;
+  statusMessage?: string;
 }
 
-export interface ServerResponse {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
-  version: string;
-  repository?: {
-    type: string;
-    url: string;
-  } | null;
-  packages?: Array<{
-    registry: string;
-    identifier: string;
-    version?: string;
-  }> | null;
-  remote?: {
-    transport: string;
-    url?: string;
-  } | null;
-  metadata: Record<string, any>;
-  created_at?: Date;
-  updated_at?: Date;
-}
-
-export interface ServersListResponse {
+// Response for the all-versions status update endpoint.
+export interface AllVersionsStatusResponse {
+  updatedCount: number;
   servers: ServerResponse[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-    has_more: boolean;
-  };
 }
+
+// Re-export the response shapes consumed by routes.
+export type { ServerResponse, ServerListResponse } from './mcp';
 
 // API Key-related types
 export interface ApiKeyCreateRequest {
@@ -143,9 +111,14 @@ export interface PaginationQuery {
   offset?: string;
 }
 
-export interface ServersQuery extends PaginationQuery {
-  status?: string;
+// v0.1 server listing uses opaque cursor pagination plus spec filters.
+export interface ServersQuery {
+  cursor?: string;
+  limit?: string;
   search?: string;
+  updated_since?: string;
+  version?: string;
+  include_deleted?: string;
 }
 
 export interface ApiKeysQuery extends PaginationQuery {
@@ -174,9 +147,10 @@ export type ServerResponseResult = ServerResponse | APIErrorResponse;
 export type ApiKeyResponseResult = ApiKeyResponse | APIErrorResponse;
 export type ApiKeyCreateResponseResult = ApiKeyCreateResponse | APIErrorResponse;
 export type ApiKeyListResponseResult = ApiKeyListResponse | APIErrorResponse;
-export type ServersListResponseResult = ServersListResponse | APIErrorResponse;
+export type ServersListResponseResult = ServerListResponse | APIErrorResponse;
 export type UserResponseResult = UserResponse | APIErrorResponse;
 export type LoginResponseResult = LoginResponse | APIErrorResponse;
+export type AllVersionsStatusResponseResult = AllVersionsStatusResponse | APIErrorResponse;
 
 // Helper type guard functions
 export function isErrorResponse(response: any): response is APIErrorResponse {

@@ -1,5 +1,8 @@
-# Multi-stage build for monorepo API
-FROM node:18-alpine AS builder
+# Multi-stage build for monorepo API.
+# NOTE: base images use an active Node LTS (20). For supply-chain integrity,
+# pin these to immutable sha256 digests via a controlled update process
+# (e.g. Renovate/Dependabot) in your environment.
+FROM node:20-alpine AS builder
 
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
@@ -32,7 +35,9 @@ RUN npx prisma generate
 RUN npx tsc
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
+
+ENV NODE_ENV=production
 
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
@@ -63,6 +68,6 @@ EXPOSE 3010
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3010/v0/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+  CMD node -e "require('http').get('http://localhost:3010/v0.1/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 CMD ["node", "packages/api/dist/index.js"]

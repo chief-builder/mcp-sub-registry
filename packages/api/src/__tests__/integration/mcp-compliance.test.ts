@@ -1,373 +1,238 @@
 /**
- * Integration Tests for MCP Protocol Compliance
- * Tests full MCP Registry API v2025-07-09 compliance with real database
+ * Integration Tests for MCP Registry v0.1 Compliance
+ * Exercises the /v0.1 API against a real database.
  */
 
 import request from 'supertest';
 import app from '../../app';
 import { testUtils } from '../setup';
 
-describe('MCP Protocol Compliance Integration Tests', () => {
-  let testAuth: any;
+const OFFICIAL = 'io.modelcontextprotocol.registry/official';
+
+function buildServer(name: string, overrides: Record<string, any> = {}): Record<string, any> {
+  return {
+    $schema: 'https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json',
+    name,
+    description: 'A compliant MCP server',
+    version: '1.0.0',
+    repository: { url: 'https://github.com/acme/server', source: 'github' },
+    packages: [{
+      registryType: 'npm',
+      registryBaseUrl: 'https://registry.npmjs.org',
+      identifier: '@acme/server',
+      version: '1.0.0',
+      transport: { type: 'stdio' },
+    }],
+    ...overrides,
+  };
+}
+
+describe('MCP Registry v0.1 Compliance', () => {
+  let auth: any;
 
   beforeEach(async () => {
     await testUtils.cleanup();
-    testAuth = await testUtils.createTestAuth(['publish', 'read', 'write']);
+    auth = await testUtils.createTestAuth(); // admin-scoped key
   });
 
   afterEach(async () => {
     await testUtils.cleanup();
   });
 
-  describe('MCP Registry API v2025-07-09 Compliance', () => {
-    it('should follow exact API specification for server listing', async () => {
-      // Create test servers
-      const server1 = await testUtils.createTestServer('', {
-        name: 'com.company.analytics',
-        status: 'stable'
-      });
-      
-      const server2 = await testUtils.createTestServer('', {
-        name: 'com.company.monitoring',
-        status: 'experimental'
-      });
+  describe('Server listing', () => {
+    it('returns the v0.1 list envelope with the official _meta block', async () => {
+      await testUtils.createTestServer('', { name: 'com.acme/analytics' });
+      await testUtils.createTestServer('', { name: 'com.acme/monitoring' });
 
-      const response = await request(app)
-        .get('/v0/servers')
-        .expect(200);
+      const res = await request(app).get('/v0.1/servers').expect(200);
 
-      // Verify response structure matches MCP spec
-      expect(response.body).toHaveProperty('servers');
-      expect(response.body).toHaveProperty('pagination');
-      
-      expect(response.body.servers).toHaveLength(2);
-      
-      // Verify each server has required MCP fields
-      response.body.servers.forEach((server: any) => {
-        expect(server).toHaveProperty('id');
-        expect(server).toHaveProperty('name');
-        expect(server).toHaveProperty('description');
-        expect(server).toHaveProperty('version');
-        expect(server).toHaveProperty('status');
-        expect(server.status).toMatch(/^(experimental|beta|stable|deprecated)$/);
-        
-        // Optional fields that should be present if set
-        if (server.repository) {
-          expect(server.repository).toHaveProperty('type');
-          expect(server.repository).toHaveProperty('url');
-        }
-        
-        if (server.packages && server.packages.length > 0) {
-          server.packages.forEach((pkg: any) => {
-            expect(pkg).toHaveProperty('registry');
-            expect(pkg).toHaveProperty('identifier');
-          });
-        }
-        
-        if (server.remote) {
-          expect(server.remote).toHaveProperty('transport');
-        }
-      });
+      expect(res.body).toHaveProperty('servers');
+      expect(res.body.metadata).toMatchObject({ count: 2 });
+      expect(res.body.servers).toHaveLength(2);
 
-      // Verify pagination structure
-      expect(response.body.pagination).toMatchObject({
-        total: 2,
-        limit: 50,
-        offset: 0,
-        has_more: false
+      res.body.servers.forEach((s: any) => {
+        expect(s).toHaveProperty('name');
+        expect(s).toHaveProperty('version');
+        const official = s._meta[OFFICIAL];
+        expect(official.status).toMatch(/^(active|deprecated|deleted)$/);
+        expect(typeof official.isLatest).toBe('boolean');
       });
     });
 
-    it('should handle cursor-based pagination correctly', async () => {
-      // Create multiple test servers
-      const servers: any[] = [];
+    it('paginates with an opaque cursor', async () => {
       for (let i = 1; i <= 75; i++) {
-        const server = await testUtils.createTestServer('', {
-          name: `com.company.server${i.toString().padStart(2, '0')}`,
-          description: `Test server ${i}`
-        });
-        servers.push(server);
+        await testUtils.createTestServer('', { name: `com.acme/server-${i.toString().padStart(2, '0')}` });
       }
 
-      // First page
-      const page1 = await request(app)
-        .get('/v0/servers?limit=50')
-        .expect(200);
-
+      const page1 = await request(app).get('/v0.1/servers?limit=50').expect(200);
       expect(page1.body.servers).toHaveLength(50);
-      expect(page1.body.pagination.has_more).toBe(true);
-      expect(page1.body.pagination.total).toBe(75);
+      expect(page1.body.metadata.count).toBe(75);
+      expect(page1.body.metadata.nextCursor).toBeTruthy();
 
-      // Second page
       const page2 = await request(app)
-        .get('/v0/servers?limit=50&offset=50')
+        .get(`/v0.1/servers?limit=50&cursor=${encodeURIComponent(page1.body.metadata.nextCursor)}`)
         .expect(200);
-
       expect(page2.body.servers).toHaveLength(25);
-      expect(page2.body.pagination.has_more).toBe(false);
-      expect(page2.body.pagination.total).toBe(75);
+      expect(page2.body.metadata.nextCursor).toBeFalsy();
+
+      // No overlap between pages.
+      const ids = new Set([
+        ...page1.body.servers.map((s: any) => `${s.name}@${s.version}`),
+        ...page2.body.servers.map((s: any) => `${s.name}@${s.version}`),
+      ]);
+      expect(ids.size).toBe(75);
     });
 
-    it('should validate MCP server schema on publish', async () => {
-      const validServer = {
-        name: 'com.company.valid-server',
-        description: 'A fully compliant MCP server',
-        version: '2.1.0',
-        status: 'stable',
-        repository: {
-          type: 'git',
-          url: 'https://github.com/company/valid-server'
-        },
-        packages: [{
-          registry: 'npm',
-          identifier: '@company/valid-server',
-          version: '2.1.0'
-        }],
-        remote: {
-          transport: 'stdio',
-          url: 'npx @company/valid-server'
-        },
-        metadata: {
-          'com.company.enterprise': {
-            owner: 'platform-team',
-            tier: 1,
-            security_classification: 'internal',
-            support_contact: 'platform@company.com'
-          }
-        }
-      };
+    it('searches by name substring', async () => {
+      await testUtils.createTestServer('', { name: 'com.acme/database-proxy' });
+      await testUtils.createTestServer('', { name: 'com.acme/web-cache' });
 
-      const response = await request(app)
-        .post('/v0/publish')
-        .set(testAuth.headers)
-        .send(validServer)
-        .expect(201);
-
-      // Verify response matches input
-      expect(response.body.name).toBe(validServer.name);
-      expect(response.body.description).toBe(validServer.description);
-      expect(response.body.version).toBe(validServer.version);
-      expect(response.body.status).toBe(validServer.status);
-      expect(response.body.repository).toEqual(validServer.repository);
-      expect(response.body.packages).toEqual(validServer.packages);
-      expect(response.body.remote).toEqual(validServer.remote);
-      expect(response.body.metadata).toEqual(validServer.metadata);
-    });
-
-    it('should reject invalid MCP server schemas', async () => {
-      const invalidServers = [
-        // Missing required name
-        {
-          description: 'Missing name',
-          version: '1.0.0'
-        },
-        // Invalid status
-        {
-          name: 'com.company.invalid-status',
-          description: 'Invalid status value',
-          version: '1.0.0',
-          status: 'invalid-status'
-        },
-        // Invalid repository structure
-        {
-          name: 'com.company.invalid-repo',
-          description: 'Invalid repository',
-          version: '1.0.0',
-          repository: {
-            url: 'https://github.com/test/repo'
-            // Missing type
-          }
-        },
-        // Invalid package structure
-        {
-          name: 'com.company.invalid-package',
-          description: 'Invalid package',
-          version: '1.0.0',
-          packages: [{
-            identifier: '@company/package'
-            // Missing registry
-          }]
-        }
-      ];
-
-      for (const invalidServer of invalidServers) {
-        await request(app)
-          .post('/v0/publish')
-          .set(testAuth.headers)
-          .send(invalidServer)
-          .expect(400);
-      }
-    });
-
-    it('should handle server retrieval by ID correctly', async () => {
-      const testServer = await testUtils.createTestServer('', {
-        name: 'com.company.retrieve-test',
-        metadata: {
-          'com.company.enterprise': {
-            owner: 'test-team',
-            created_by: 'integration-test'
-          }
-        }
-      });
-
-      const response = await request(app)
-        .get(`/v0/servers/${testServer.id}`)
-        .expect(200);
-
-      expect(response.body).toMatchObject({
-        id: testServer.id,
-        name: 'com.company.retrieve-test',
-        description: testServer.description,
-        version: testServer.version,
-        status: testServer.status,
-        metadata: testServer.metadata
-      });
-    });
-
-    it('should support status-based filtering', async () => {
-      await testUtils.createTestServer('', {
-        name: 'com.company.stable-server',
-        status: 'stable'
-      });
-      
-      await testUtils.createTestServer('', {
-        name: 'com.company.experimental-server',
-        status: 'experimental'
-      });
-      
-      await testUtils.createTestServer('', {
-        name: 'com.company.beta-server',
-        status: 'beta'
-      });
-
-      // Filter by stable
-      const stableResponse = await request(app)
-        .get('/v0/servers?status=stable')
-        .expect(200);
-
-      expect(stableResponse.body.servers).toHaveLength(1);
-      expect(stableResponse.body.servers[0].status).toBe('stable');
-
-      // Filter by experimental
-      const experimentalResponse = await request(app)
-        .get('/v0/servers?status=experimental')
-        .expect(200);
-
-      expect(experimentalResponse.body.servers).toHaveLength(1);
-      expect(experimentalResponse.body.servers[0].status).toBe('experimental');
-    });
-
-    it('should provide proper health endpoint', async () => {
-      const response = await request(app)
-        .get('/v0/health')
-        .expect(200);
-
-      expect(response.body).toMatchObject({
-        status: 'healthy',
-        timestamp: expect.any(String),
-        version: expect.any(String)
-      });
-
-      // Verify timestamp is valid ISO string
-      expect(new Date(response.body.timestamp).toISOString()).toBe(response.body.timestamp);
-    });
-
-    it('should provide prometheus metrics endpoint', async () => {
-      // Create some test servers
-      await testUtils.createTestServer('');
-      await testUtils.createTestServer('');
-      await testUtils.createTestServer('');
-
-      const response = await request(app)
-        .get('/metrics')
-        .expect(200);
-
-      expect(response.headers['content-type']).toContain('text/plain');
-      expect(response.text).toContain('mcp_registry_servers_total 3');
-      expect(response.text).toContain('# HELP mcp_registry_servers_total');
-      expect(response.text).toContain('# TYPE mcp_registry_servers_total counter');
+      const res = await request(app).get('/v0.1/servers?search=database').expect(200);
+      expect(res.body.servers).toHaveLength(1);
+      expect(res.body.servers[0].name).toBe('com.acme/database-proxy');
     });
   });
 
-  describe('Enterprise Metadata Compliance', () => {
-    it('should preserve enterprise metadata fields', async () => {
-      const serverWithMetadata = {
-        name: 'com.company.enterprise-server',
-        description: 'Server with enterprise metadata',
-        version: '1.0.0',
-        metadata: {
-          'com.company.enterprise': {
-            owner: 'platform-team',
-            tier: 1,
-            security_classification: 'confidential',
-            support_contact: 'platform@company.com',
-            cost_center: 'ENG-001',
-            compliance_tags: ['SOX', 'PCI', 'GDPR'],
-            deployment_env: ['staging', 'production']
-          },
-          'com.company.monitoring': {
-            alerts_enabled: true,
-            metrics_retention_days: 90,
-            log_level: 'info'
-          }
-        }
-      };
+  describe('Publishing', () => {
+    it('publishes a valid server.json and echoes it back', async () => {
+      const body = buildServer('io.github.acme/valid-server', {
+        version: '2.1.0',
+        title: 'Valid Server',
+        websiteUrl: 'https://docs.acme.com/valid',
+        remotes: [{ type: 'streamable-http', url: 'https://mcp.acme.com/valid' }],
+      });
 
-      const response = await request(app)
-        .post('/v0/publish')
-        .set(testAuth.headers)
-        .send(serverWithMetadata)
-        .expect(201);
+      const res = await request(app).post('/v0.1/publish').set(auth.headers).send(body).expect(201);
 
-      // Verify metadata is preserved exactly
-      expect(response.body.metadata).toEqual(serverWithMetadata.metadata);
-
-      // Verify retrieval preserves metadata
-      const retrieveResponse = await request(app)
-        .get(`/v0/servers/${response.body.id}`)
-        .expect(200);
-
-      expect(retrieveResponse.body.metadata).toEqual(serverWithMetadata.metadata);
+      expect(res.body.name).toBe(body.name);
+      expect(res.body.version).toBe('2.1.0');
+      expect(res.body.title).toBe('Valid Server');
+      expect(res.body.repository).toEqual(body.repository);
+      expect(res.body.packages).toEqual(body.packages);
+      expect(res.body.remotes).toEqual(body.remotes);
+      expect(res.body._meta[OFFICIAL]).toMatchObject({ status: 'active', isLatest: true });
     });
 
-    it('should handle complex nested metadata structures', async () => {
-      const complexMetadata = {
-        'com.company.enterprise': {
-          team_structure: {
-            owner: 'platform-team',
-            maintainers: ['alice@company.com', 'bob@company.com'],
-            on_call: {
-              primary: 'platform-oncall@company.com',
-              escalation: ['platform-lead@company.com']
-            }
-          },
-          deployment_config: {
-            environments: {
-              staging: {
-                replicas: 2,
-                resources: { cpu: '500m', memory: '1Gi' }
-              },
-              production: {
-                replicas: 5,
-                resources: { cpu: '1000m', memory: '2Gi' }
-              }
-            }
-          }
-        }
-      };
+    it('rejects invalid server.json payloads', async () => {
+      const invalid = [
+        { description: 'no name', version: '1.0.0', remotes: [{ type: 'sse', url: 'https://x/y' }] },
+        buildServer('not-namespaced'),                                  // bad name
+        buildServer('io.github.acme/bad-repo', { repository: { url: 'https://x/y' } }), // repo missing source
+        { ...buildServer('io.github.acme/bad-pkg'), packages: [{ identifier: 'x', version: '1.0.0' }] }, // pkg missing registryType/transport
+        { name: 'io.github.acme/empty', description: 'no packages or remotes', version: '1.0.0' }, // neither packages nor remotes
+      ];
+      for (const body of invalid) {
+        await request(app).post('/v0.1/publish').set(auth.headers).send(body).expect(400);
+      }
+    });
 
-      const response = await request(app)
-        .post('/v0/publish')
-        .set(testAuth.headers)
-        .send({
-          name: 'com.company.complex-metadata',
-          description: 'Server with complex metadata',
-          version: '1.0.0',
-          metadata: complexMetadata
-        })
+    it('preserves publisher _meta and adds the official block', async () => {
+      const body = buildServer('io.github.acme/meta-server', {
+        _meta: {
+          'com.acme.enterprise': { owner: 'platform-team', tier: 1, tags: ['SOX', 'PCI'] },
+        },
+      });
+
+      const res = await request(app).post('/v0.1/publish').set(auth.headers).send(body).expect(201);
+      expect(res.body._meta['com.acme.enterprise']).toEqual(body._meta['com.acme.enterprise']);
+      expect(res.body._meta[OFFICIAL]).toBeDefined();
+    });
+  });
+
+  describe('Versioning and status', () => {
+    it('tracks version history and moves isLatest to the newest version', async () => {
+      const name = 'io.github.acme/versioned';
+      await request(app).post('/v0.1/publish').set(auth.headers).send(buildServer(name, { version: '1.0.0' })).expect(201);
+      await request(app).post('/v0.1/publish').set(auth.headers).send(buildServer(name, { version: '1.1.0' })).expect(201);
+
+      const enc = encodeURIComponent(name);
+
+      // List shows only the latest version.
+      const list = await request(app).get('/v0.1/servers').expect(200);
+      const listed = list.body.servers.filter((s: any) => s.name === name);
+      expect(listed).toHaveLength(1);
+      expect(listed[0].version).toBe('1.1.0');
+
+      // Versions endpoint shows both, newest first.
+      const versions = await request(app).get(`/v0.1/servers/${enc}/versions`).expect(200);
+      expect(versions.body.servers.map((s: any) => s.version)).toEqual(['1.1.0', '1.0.0']);
+
+      // "latest" resolves to 1.1.0.
+      const latest = await request(app).get(`/v0.1/servers/${enc}/versions/latest`).expect(200);
+      expect(latest.body.version).toBe('1.1.0');
+      expect(latest.body._meta[OFFICIAL].isLatest).toBe(true);
+    });
+
+    it('deprecates a single version via PATCH status', async () => {
+      const name = 'io.github.acme/deprecate-me';
+      await request(app).post('/v0.1/publish').set(auth.headers).send(buildServer(name)).expect(201);
+      const enc = encodeURIComponent(name);
+
+      const res = await request(app)
+        .patch(`/v0.1/servers/${enc}/versions/1.0.0/status`)
+        .set(auth.headers)
+        .send({ status: 'deprecated', statusMessage: 'use a newer version' })
+        .expect(200);
+
+      expect(res.body._meta[OFFICIAL].status).toBe('deprecated');
+      expect(res.body._meta[OFFICIAL].statusMessage).toBe('use a newer version');
+    });
+
+    it('soft-deletes a version and hides it from the default list', async () => {
+      const name = 'io.github.acme/delete-me';
+      await request(app).post('/v0.1/publish').set(auth.headers).send(buildServer(name)).expect(201);
+      const enc = encodeURIComponent(name);
+
+      await request(app).delete(`/v0.1/servers/${enc}/versions/1.0.0`).set(auth.headers).expect(200);
+
+      const list = await request(app).get('/v0.1/servers').expect(200);
+      expect(list.body.servers.find((s: any) => s.name === name)).toBeUndefined();
+
+      // ...but visible with include_deleted.
+      const withDeleted = await request(app).get('/v0.1/servers?include_deleted=true').expect(200);
+      expect(withDeleted.body.servers.find((s: any) => s.name === name)).toBeDefined();
+    });
+  });
+
+  describe('Namespace ownership', () => {
+    it('blocks publishing under an unowned namespace and allows it once claimed', async () => {
+      const pubAuth = await testUtils.createTestAuth(['publish', 'read']); // non-admin credential
+
+      // No namespace claim yet -> forbidden.
+      await request(app)
+        .post('/v0.1/publish')
+        .set(pubAuth.headers)
+        .send(buildServer('io.github.unowned/tool'))
+        .expect(403);
+
+      // Claim the namespace for the publisher, then publish succeeds.
+      await testUtils.createNamespace('io.github.owned', pubAuth.user.id);
+      await request(app)
+        .post('/v0.1/publish')
+        .set(pubAuth.headers)
+        .send(buildServer('io.github.owned/tool'))
         .expect(201);
+    });
+  });
 
-      expect(response.body.metadata).toEqual(complexMetadata);
+  describe('Health and metrics', () => {
+    it('serves the v0.1 health endpoint', async () => {
+      const res = await request(app).get('/v0.1/health').expect(200);
+      expect(res.body).toMatchObject({ status: 'healthy' });
+      expect(new Date(res.body.timestamp).toISOString()).toBe(res.body.timestamp);
+    });
+
+    it('requires admin auth for metrics and reports server counts', async () => {
+      await testUtils.createTestServer('');
+      await testUtils.createTestServer('');
+
+      // Unauthenticated -> rejected.
+      await request(app).get('/metrics').expect(401);
+
+      const res = await request(app).get('/metrics').set(auth.headers).expect(200);
+      expect(res.headers['content-type']).toContain('text/plain');
+      expect(res.text).toContain('# HELP mcp_registry_servers_total');
+      expect(res.text).toContain('mcp_registry_servers_total 2');
     });
   });
 });

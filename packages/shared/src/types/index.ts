@@ -1,56 +1,99 @@
 // MCP Registry API Types
-// Based on MCP Registry API v2025-07-09
+// Aligned with the official MCP Registry API v0.1 and server.json 2025-12-11.
 
-export interface MCPServer {
-  id: string;
-  name: string;
-  description: string;
-  version: string;
-  status: ServerStatus;
-  created_at: string;
-  updated_at: string;
-  repository?: Repository;
-  packages?: Package[];
-  remote?: RemoteConfig;
-  metadata?: Record<string, any>;
-}
+export const SERVER_JSON_SCHEMA_URL =
+  'https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json';
+export const OFFICIAL_META_KEY = 'io.modelcontextprotocol.registry/official';
 
-export type ServerStatus = 'experimental' | 'beta' | 'stable' | 'deprecated';
+export type ServerStatus = 'active' | 'deprecated' | 'deleted';
+export type PackageRegistryType = 'npm' | 'nuget' | 'pypi' | 'oci' | 'mcpb';
+export type PackageTransportType = 'stdio' | 'streamable-http' | 'sse';
+export type RemoteTransportType = 'streamable-http' | 'sse';
 
 export interface Repository {
-  type: 'git' | 'mercurial' | 'svn';
   url: string;
-  branch?: string;
-  tag?: string;
-  commit?: string;
+  source: string;
+  id?: string;
+  subfolder?: string;
+}
+
+export interface Transport {
+  type: PackageTransportType;
+  url?: string;
+}
+
+export interface Argument {
+  type: 'positional' | 'named';
+  name?: string;
+  value?: string;
+  valueHint?: string;
+  description?: string;
+  default?: string;
+  isRequired?: boolean;
+  isRepeated?: boolean;
+  format?: 'string' | 'number' | 'boolean' | 'filepath';
+  choices?: string[];
+}
+
+export interface EnvironmentVariable {
+  name: string;
+  description?: string;
+  default?: string;
+  isRequired?: boolean;
+  isSecret?: boolean;
+  choices?: string[];
 }
 
 export interface Package {
-  registry: 'npm' | 'pypi' | 'maven' | 'docker' | 'cargo' | 'gem';
+  registryType: PackageRegistryType;
+  registryBaseUrl?: string;
   identifier: string;
   version: string;
-  url?: string;
+  fileSha256?: string;
+  transport: Transport;
+  runtimeHint?: string;
+  runtimeArguments?: Argument[];
+  packageArguments?: Argument[];
+  environmentVariables?: EnvironmentVariable[];
 }
 
 export interface RemoteConfig {
-  transport: 'stdio' | 'http' | 'https' | 'tcp' | 'websocket';
-  url?: string;
-  host?: string;
-  port?: number;
-  path?: string;
+  type: RemoteTransportType;
+  url: string;
+  headers?: Array<{ name: string; value?: string; description?: string; isRequired?: boolean; isSecret?: boolean }>;
+}
+
+export interface OfficialMeta {
+  status: ServerStatus;
+  statusMessage?: string;
+  publishedAt: string;
+  updatedAt: string;
+  statusChangedAt?: string;
+  isLatest: boolean;
+}
+
+export interface MCPServer {
+  $schema?: string;
+  name: string;
+  description: string;
+  title?: string;
+  version: string;
+  websiteUrl?: string;
+  repository?: Repository;
+  packages?: Package[];
+  remotes?: RemoteConfig[];
+  _meta?: Record<string, any> & { [OFFICIAL_META_KEY]?: OfficialMeta };
 }
 
 // API Response Types
 export interface ServerListResponse {
   servers: MCPServer[];
-  pagination: PaginationInfo;
+  metadata: PaginationInfo;
 }
 
 export interface PaginationInfo {
-  total: number;
-  limit: number;
-  offset: number;
-  has_more: boolean;
+  count: number;
+  nextCursor?: string;
 }
 
 // Authentication Types
@@ -81,16 +124,18 @@ export interface ApiKey {
 
 export type ApiKeyScope = 'read' | 'publish' | 'admin';
 
-// Request Types
+// Request Types - a publish payload is a server.json document.
 export interface PublishServerRequest {
+  $schema?: string;
   name: string;
   description: string;
+  title?: string;
   version: string;
-  status: ServerStatus;
+  websiteUrl?: string;
   repository?: Repository;
   packages?: Package[];
-  remote?: RemoteConfig;
-  metadata?: Record<string, any>;
+  remotes?: RemoteConfig[];
+  _meta?: Record<string, any>;
 }
 
 export interface CreateApiKeyRequest {
@@ -150,11 +195,12 @@ export interface RegistryMetrics {
 
 // Filter and Query Types
 export interface ServerFilters {
-  status?: ServerStatus;
   search?: string;
-  metadata?: Record<string, any>;
+  version?: string;
+  updated_since?: string;
+  include_deleted?: boolean;
   limit?: number;
-  offset?: number;
+  cursor?: string;
 }
 
 export interface ApiKeyFilters {

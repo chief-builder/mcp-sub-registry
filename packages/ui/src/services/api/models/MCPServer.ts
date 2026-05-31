@@ -1,39 +1,28 @@
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
+/* MCP Registry v0.1 server (server.json 2025-12-11 + official _meta) */
 
+import type { OfficialMeta } from './OfficialMeta';
 import type { Package } from './Package';
 import type { RemoteConfig } from './RemoteConfig';
 import type { Repository } from './Repository';
-import type { ServerStatus } from './ServerStatus';
 
 export type MCPServer = {
+    $schema?: string;
     /**
-     * Unique server identifier
-     */
-    id: string;
-    /**
-     * Server name in reverse DNS format
+     * Server name as "<reverse-dns-namespace>/<name>".
      */
     name: string;
-    /**
-     * Human-readable server description
-     */
     description: string;
     /**
-     * Semantic version
+     * Human-readable display name.
      */
+    title?: string;
     version: string;
-    status: ServerStatus;
-    created_at?: string;
-    updated_at?: string;
+    websiteUrl?: string;
     repository?: Repository;
     packages?: Array<Package>;
-    remote?: RemoteConfig;
-    /**
-     * Additional server metadata
-     */
-    metadata?: Record<string, any>;
+    remotes?: Array<RemoteConfig>;
+    _meta?: {
+        'io.modelcontextprotocol.registry/official'?: OfficialMeta;
+        [key: string]: any;
+    };
 };
-

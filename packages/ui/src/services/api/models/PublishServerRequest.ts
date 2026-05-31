@@ -1,27 +1,21 @@
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
+/* MCP Registry v0.1 publish payload (a server.json document) */
 
 import type { Package } from './Package';
 import type { RemoteConfig } from './RemoteConfig';
 import type { Repository } from './Repository';
-import type { ServerStatus } from './ServerStatus';
 
 export type PublishServerRequest = {
+    $schema?: string;
     /**
-     * Server name in reverse DNS format
+     * Server name as "<reverse-dns-namespace>/<name>".
      */
     name: string;
     description: string;
-    /**
-     * Semantic version
-     */
+    title?: string;
     version: string;
-    status: ServerStatus;
+    websiteUrl?: string;
     repository?: Repository;
     packages?: Array<Package>;
-    remote?: RemoteConfig;
-    metadata?: Record<string, any>;
+    remotes?: Array<RemoteConfig>;
+    _meta?: Record<string, any>;
 };
-

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../db';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
@@ -17,10 +18,9 @@ async function generateMetrics(): Promise<string> {
     // Get basic registry statistics
     const [
       totalServers,
-      stableServers,
-      betaServers,
-      experimentalServers,
+      activeServers,
       deprecatedServers,
+      deletedServers,
       totalUsers,
       activeUsers,
       totalApiKeys,
@@ -29,10 +29,9 @@ async function generateMetrics(): Promise<string> {
       auditLogCount
     ] = await Promise.all([
       prisma.server.count(),
-      prisma.server.count({ where: { status: 'stable' } }),
-      prisma.server.count({ where: { status: 'beta' } }),
-      prisma.server.count({ where: { status: 'experimental' } }),
-      prisma.server.count({ where: { status: 'deprecated' } }),
+      prisma.server.count({ where: { registry_status: 'active' } }),
+      prisma.server.count({ where: { registry_status: 'deprecated' } }),
+      prisma.server.count({ where: { registry_status: 'deleted' } }),
       prisma.user.count(),
       prisma.user.count({ where: { is_active: true } }),
       prisma.apiKey.count(),
@@ -63,10 +62,9 @@ mcp_registry_servers_total ${totalServers}
 
 # HELP mcp_registry_servers_by_status Number of servers by status
 # TYPE mcp_registry_servers_by_status gauge
-mcp_registry_servers_by_status{status="stable"} ${stableServers}
-mcp_registry_servers_by_status{status="beta"} ${betaServers}
-mcp_registry_servers_by_status{status="experimental"} ${experimentalServers}
+mcp_registry_servers_by_status{status="active"} ${activeServers}
 mcp_registry_servers_by_status{status="deprecated"} ${deprecatedServers}
+mcp_registry_servers_by_status{status="deleted"} ${deletedServers}
 
 # HELP mcp_registry_servers_created_24h Servers created in the last 24 hours
 # TYPE mcp_registry_servers_created_24h gauge
@@ -134,27 +132,29 @@ mcp_registry_database_errors_total 1
   }
 }
 
-// GET /metrics - Prometheus metrics endpoint
-router.get('/', async (req: Request, res: Response) => {
+// GET /metrics - Prometheus metrics endpoint (admin only; exposes operational
+// data such as user/key counts and runtime info). Scrapers authenticate with an
+// admin-scoped credential (JWT or API key).
+router.get('/', authenticate({ required: true, scopes: ['admin'] }), async (req: Request, res: Response) => {
   try {
     const now = Date.now();
-    
+
     // Use cached metrics if still valid
     if (metricsCache && (now - lastCacheUpdate) < CACHE_TTL) {
       res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-      res.set('Cache-Control', `public, max-age=${Math.floor(CACHE_TTL / 1000)}`);
+      res.set('Cache-Control', 'private, no-store');
       return res.send(metricsCache);
     }
 
     // Generate fresh metrics
     const metrics = await generateMetrics();
-    
+
     // Cache the metrics
     metricsCache = metrics;
     lastCacheUpdate = now;
 
     res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-    res.set('Cache-Control', `public, max-age=${Math.floor(CACHE_TTL / 1000)}`);
+    res.set('Cache-Control', 'private, no-store');
     res.send(metrics);
   } catch (error) {
     logger.error('Error serving metrics:', error);

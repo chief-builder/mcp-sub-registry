@@ -21,7 +21,7 @@ function generateApiKey(): { key: string; hash: string } {
   return { key, hash };
 }
 
-router.post('/create', authenticate({ required: true, scopes: ['admin'] }), async (req: AuthenticatedRequest & { body: ApiKeyCreateRequest }, res: Response<ApiKeyCreateResponseResult>) => {
+router.post('/create', authenticate({ required: true, scopes: ['admin'], allowApiKey: false }), async (req: AuthenticatedRequest & { body: ApiKeyCreateRequest }, res: Response<ApiKeyCreateResponseResult>) => {
   try {
     const {
       name,
@@ -110,7 +110,7 @@ router.post('/create', authenticate({ required: true, scopes: ['admin'] }), asyn
   }
 });
 
-router.get('/', authenticate({ required: true, scopes: ['admin'] }), async (req: TypedRequestWithQuery<any, ApiKeysQuery> & AuthenticatedRequest, res: Response<ApiKeyListResponseResult>) => {
+router.get('/', authenticate({ required: true, allowApiKey: false }), async (req: TypedRequestWithQuery<any, ApiKeysQuery> & AuthenticatedRequest, res: Response<ApiKeyListResponseResult>) => {
   try {
     const {
       limit = '50',
@@ -121,9 +121,10 @@ router.get('/', authenticate({ required: true, scopes: ['admin'] }), async (req:
     const limitNum = Math.min(parseInt(limit as string) || 50, 100);
     const offsetNum = parseInt(offset as string) || 0;
 
+    // Non-admins always see only their own keys; only admins may query another
+    // user's keys via the user_id filter.
     const where: any = {};
-    
-    if (user_id && req.user!.roles.includes('admin')) {
+    if (user_id && req.is_admin) {
       where.user_id = user_id as string;
     } else {
       where.user_id = req.user!.id;
@@ -174,16 +175,16 @@ router.get('/', authenticate({ required: true, scopes: ['admin'] }), async (req:
   }
 });
 
-router.get('/:id', authenticate({ required: true }), async (req: AuthenticatedRequest, res: Response<ApiKeyResponseResult>) => {
+router.get('/:id', authenticate({ required: true, allowApiKey: false }), async (req: AuthenticatedRequest, res: Response<ApiKeyResponseResult>) => {
   try {
     const { id } = req.params;
 
     const where: any = { id };
-    if (!req.user!.roles.includes('admin')) {
+    if (!req.is_admin) {
       where.user_id = req.user!.id;
     }
 
-    const apiKey = await prisma.apiKey.findUnique({
+    const apiKey = await prisma.apiKey.findFirst({
       where,
       select: {
         id: true,
@@ -222,17 +223,17 @@ router.get('/:id', authenticate({ required: true }), async (req: AuthenticatedRe
   }
 });
 
-router.patch('/:id', authenticate({ required: true }), async (req: AuthenticatedRequest, res: Response<ApiKeyResponseResult>) => {
+router.patch('/:id', authenticate({ required: true, allowApiKey: false }), async (req: AuthenticatedRequest, res: Response<ApiKeyResponseResult>) => {
   try {
     const { id } = req.params;
     const { name, description, is_active }: { name?: string; description?: string; is_active?: boolean } = req.body;
 
     const where: any = { id };
-    if (!req.user!.roles.includes('admin')) {
+    if (!req.is_admin) {
       where.user_id = req.user!.id;
     }
 
-    const existingKey = await prisma.apiKey.findUnique({ where });
+    const existingKey = await prisma.apiKey.findFirst({ where });
     if (!existingKey) {
       return res.status(404).json({
         error: 'API key not found',
@@ -295,16 +296,16 @@ router.patch('/:id', authenticate({ required: true }), async (req: Authenticated
   }
 });
 
-router.delete('/:id', authenticate({ required: true }), async (req: AuthenticatedRequest, res: Response<{ message: string } | { error: string; code: string }>) => {
+router.delete('/:id', authenticate({ required: true, allowApiKey: false }), async (req: AuthenticatedRequest, res: Response<{ message: string } | { error: string; code: string }>) => {
   try {
     const { id } = req.params;
 
     const where: any = { id };
-    if (!req.user!.roles.includes('admin')) {
+    if (!req.is_admin) {
       where.user_id = req.user!.id;
     }
 
-    const existingKey = await prisma.apiKey.findUnique({ where });
+    const existingKey = await prisma.apiKey.findFirst({ where });
     if (!existingKey) {
       return res.status(404).json({
         error: 'API key not found',

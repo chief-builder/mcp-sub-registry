@@ -62,19 +62,32 @@ async function validateApiKey(keyValue: string): Promise<ApiKeyValidationResult>
   }
 }
 
-function validateJWT(token: string): JWTPayload | null {
+async function validateJWT(token: string): Promise<JWTPayload | null> {
   try {
-    const decoded = jwt.verify(token, config.jwt.secret) as jwt.JwtPayload;
-    if (decoded && decoded.userId && decoded.email && decoded.roles) {
-      return {
-        userId: decoded.userId,
-        email: decoded.email,
-        roles: decoded.roles,
-        iat: decoded.iat || 0,
-        exp: decoded.exp || 0
-      };
+    // Pin the expected algorithm to prevent alg-confusion attacks.
+    const decoded = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+    if (!decoded || !decoded.userId) {
+      return null;
     }
-    return null;
+
+    // Reload the user so a disabled or demoted account cannot keep acting on a
+    // still-unexpired token, and so roles always reflect current state.
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, roles: true, is_active: true },
+    });
+
+    if (!user || !user.is_active) {
+      return null;
+    }
+
+    return {
+      userId: user.id,
+      email: user.email,
+      roles: user.roles,
+      iat: decoded.iat || 0,
+      exp: decoded.exp || 0,
+    };
   } catch (error) {
     logger.debug('JWT validation failed:', error);
     return null;
@@ -110,8 +123,8 @@ export function authenticate(options: AuthenticationOptions = {}) {
 
       if (authHeader.startsWith('Bearer ') && allowJWT) {
         const token = authHeader.replace('Bearer ', '');
-        const jwtPayload = validateJWT(token);
-        
+        const jwtPayload = await validateJWT(token);
+
         if (jwtPayload) {
           if (scopes.length > 0 && !hasRequiredScope(jwtPayload.roles, scopes)) {
             return res.status(403).json({
@@ -126,7 +139,9 @@ export function authenticate(options: AuthenticationOptions = {}) {
             roles: jwtPayload.roles,
             auth_method: 'jwt'
           };
-          
+          // Admin privilege for token auth comes from the user's roles.
+          req.is_admin = jwtPayload.roles.includes('admin');
+
           return next();
         }
       }
@@ -149,9 +164,13 @@ export function authenticate(options: AuthenticationOptions = {}) {
             roles: validation.api_key.user.roles,
             auth_method: 'api_key'
           };
-          
+          // Admin privilege for key auth comes ONLY from the key's own scopes,
+          // never from the owning user's roles. A low-scope key owned by an
+          // admin user must not act as admin.
+          req.is_admin = validation.api_key.scopes.includes('admin');
+
           req.api_key = validation.api_key;
-          
+
           return next();
         }
       }

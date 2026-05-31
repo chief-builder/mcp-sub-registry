@@ -32,17 +32,22 @@ tags:
     description: Health checks and monitoring
 
 paths:
-  # MCP Server Registry Endpoints
-  /v0/servers:
+  # MCP Registry v0.1 Endpoints
+  /v0.1/servers:
     get:
       tags: [Servers]
       summary: List MCP servers
-      description: Retrieve a paginated list of MCP servers with optional filtering
+      description: Cursor-paginated list of servers (latest version of each) with optional filters
       security:
         - {}
         - ApiKeyAuth: [read]
         - BearerAuth: []
       parameters:
+        - name: cursor
+          in: query
+          description: Opaque cursor from a previous response
+          schema:
+            type: string
         - name: limit
           in: query
           description: Maximum number of servers to return
@@ -51,23 +56,28 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
-        - name: offset
-          in: query
-          description: Number of servers to skip for pagination
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-        - name: status
-          in: query
-          description: Filter servers by status
-          schema:
-            $ref: '#/components/schemas/ServerStatus'
         - name: search
           in: query
-          description: Search servers by name or description
+          description: Substring match on server name
           schema:
             type: string
+        - name: version
+          in: query
+          description: Filter by a specific version, or "latest"
+          schema:
+            type: string
+        - name: updated_since
+          in: query
+          description: Only servers updated at or after this RFC3339 timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: include_deleted
+          in: query
+          description: Include servers with status "deleted"
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: List of servers retrieved successfully
@@ -82,49 +92,219 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v0/servers/{id}:
+  /v0.1/servers/{serverName}/versions:
     get:
       tags: [Servers]
-      summary: Get server by ID
-      description: Retrieve detailed information about a specific MCP server
+      summary: List server versions
+      description: All versions of a server, newest first (serverName is URL-encoded)
       security:
         - {}
         - ApiKeyAuth: [read]
         - BearerAuth: []
       parameters:
-        - name: id
+        - name: serverName
           in: path
           required: true
-          description: Server unique identifier
           schema:
             type: string
+        - name: include_deleted
+          in: query
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
-          description: Server details retrieved successfully
+          description: Versions retrieved successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MCPServer'
+                $ref: '#/components/schemas/ServerListResponse'
         '404':
           description: Server not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal server error
+
+  /v0.1/servers/{serverName}/versions/{version}:
+    get:
+      tags: [Servers]
+      summary: Get a server version
+      description: A specific version of a server; "latest" resolves to the latest version
+      security:
+        - {}
+        - ApiKeyAuth: [read]
+        - BearerAuth: []
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Server version retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        '404':
+          description: Server version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Servers]
+      summary: Replace a server version
+      security:
+        - ApiKeyAuth: [publish]
+        - BearerAuth: [publish]
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishServerRequest'
+      responses:
+        '200':
+          description: Server version updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        '404':
+          description: Server version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Servers]
+      summary: Soft-delete a server version
+      security:
+        - ApiKeyAuth: [publish]
+        - BearerAuth: [publish]
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Server version marked deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        '404':
+          description: Server version not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v0/publish:
+  /v0.1/servers/{serverName}/versions/{version}/status:
+    patch:
+      tags: [Servers]
+      summary: Update a single version's status
+      security:
+        - ApiKeyAuth: [publish]
+        - BearerAuth: [publish]
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusUpdateRequest'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        '404':
+          description: Server version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v0.1/servers/{serverName}/status:
+    patch:
+      tags: [Servers]
+      summary: Update status for all versions of a server
+      security:
+        - ApiKeyAuth: [publish]
+        - BearerAuth: [publish]
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusUpdateRequest'
+      responses:
+        '200':
+          description: Statuses updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllVersionsStatusResponse'
+        '404':
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v0.1/publish:
     post:
       tags: [Servers]
       summary: Publish MCP server
-      description: Register a new MCP server in the registry
+      description: Publish a new server version. The caller must own the namespace in the server name.
       security:
         - ApiKeyAuth: [publish]
+        - BearerAuth: [publish]
       requestBody:
         required: true
         content:
@@ -151,13 +331,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Insufficient permissions
+          description: Insufficient permissions or namespace not owned
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Server name already exists
+          description: Server version already exists
           content:
             application/json:
               schema:
@@ -175,11 +355,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /v0/health:
+  /v0.1/health:
     get:
       tags: [Health]
       summary: MCP API health check
-      description: Check the health status of the MCP v0 API endpoints
+      description: Check the health status of the MCP v0.1 API endpoints
       security:
         - {}
       responses:
@@ -563,160 +743,247 @@ components:
       description: API key authentication using "ApiKey <key>" format
 
   schemas:
-    # Core MCP Server Types
+    # Core MCP Server Types (server.json 2025-12-11)
     MCPServer:
       type: object
-      required: [id, name, description, version, status]
+      required: [name, description, version]
       properties:
-        id:
+        $schema:
           type: string
-          description: Unique server identifier
+          format: uri
         name:
           type: string
-          description: Server name in reverse DNS format
-          example: com.company.mcp-server
+          description: Server name as "<reverse-dns-namespace>/<name>"
+          example: io.github.your-org/your-server
         description:
           type: string
-          description: Human-readable server description
+        title:
+          type: string
+          description: Human-readable display name
         version:
           type: string
-          description: Semantic version
           example: 1.0.0
-        status:
-          $ref: '#/components/schemas/ServerStatus'
-        created_at:
+        websiteUrl:
           type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+          format: uri
         repository:
           $ref: '#/components/schemas/Repository'
         packages:
           type: array
           items:
             $ref: '#/components/schemas/Package'
-        remote:
-          $ref: '#/components/schemas/RemoteConfig'
-        metadata:
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteConfig'
+        _meta:
           type: object
           additionalProperties: true
-          description: Additional server metadata
+          description: >-
+            Custom and registry metadata. The registry sets the
+            "io.modelcontextprotocol.registry/official" key (see OfficialMeta).
+          properties:
+            io.modelcontextprotocol.registry/official:
+              $ref: '#/components/schemas/OfficialMeta'
+
+    OfficialMeta:
+      type: object
+      required: [status, publishedAt, updatedAt, isLatest]
+      properties:
+        status:
+          $ref: '#/components/schemas/ServerStatus'
+        statusMessage:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        statusChangedAt:
+          type: string
+          format: date-time
+        isLatest:
+          type: boolean
 
     ServerStatus:
       type: string
-      enum: [experimental, beta, stable, deprecated]
-      description: Server development and deployment status
+      enum: [active, deprecated, deleted]
+      description: Registry status of a server version
 
     Repository:
+      type: object
+      required: [url, source]
+      properties:
+        url:
+          type: string
+          format: uri
+        source:
+          type: string
+          description: Source control host, e.g. "github"
+        id:
+          type: string
+        subfolder:
+          type: string
+          description: Path within the repository for monorepos
+
+    Transport:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [stdio, streamable-http, sse]
+        url:
+          type: string
+          format: uri
+
+    Package:
+      type: object
+      required: [registryType, identifier, version, transport]
+      properties:
+        registryType:
+          type: string
+          enum: [npm, nuget, pypi, oci, mcpb]
+        registryBaseUrl:
+          type: string
+          format: uri
+          description: Required except for oci / mcpb
+        identifier:
+          type: string
+        version:
+          type: string
+        fileSha256:
+          type: string
+          description: Required for mcpb packages
+        transport:
+          $ref: '#/components/schemas/Transport'
+        runtimeHint:
+          type: string
+        runtimeArguments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        packageArguments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        environmentVariables:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    RemoteConfig:
       type: object
       required: [type, url]
       properties:
         type:
           type: string
-          enum: [git, mercurial, svn]
+          enum: [streamable-http, sse]
         url:
           type: string
           format: uri
-        branch:
-          type: string
-        tag:
-          type: string
-        commit:
-          type: string
-
-    Package:
-      type: object
-      required: [registry, identifier, version]
-      properties:
-        registry:
-          type: string
-          enum: [npm, pypi, maven, docker, cargo, gem]
-        identifier:
-          type: string
-          description: Package identifier in the registry
-        version:
-          type: string
-          description: Package version
-        url:
-          type: string
-          format: uri
-          description: Direct download URL
-
-    RemoteConfig:
-      type: object
-      required: [transport]
-      properties:
-        transport:
-          type: string
-          enum: [stdio, http, https, tcp, websocket]
-        url:
-          type: string
-          format: uri
-        host:
-          type: string
-        port:
-          type: integer
-        path:
-          type: string
+        headers:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              value:
+                type: string
+              description:
+                type: string
+              isRequired:
+                type: boolean
+              isSecret:
+                type: boolean
 
     # Request/Response Types
     PublishServerRequest:
       type: object
-      required: [name, description, version, status]
+      required: [name, description, version]
       properties:
+        $schema:
+          type: string
+          format: uri
         name:
           type: string
-          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$'
-          description: Server name in reverse DNS format
+          pattern: '^[a-zA-Z0-9.\-]+/[a-zA-Z0-9._\-]+$'
+          description: Server name as "<reverse-dns-namespace>/<name>"
         description:
           type: string
-          minLength: 10
-          maxLength: 500
+          minLength: 1
+          maxLength: 1000
+        title:
+          type: string
         version:
           type: string
-          pattern: '^\d+\.\d+\.\d+(-[\w\d\-_]+)?(\+[\w\d\-_]+)?$'
-          description: Semantic version
-        status:
-          $ref: '#/components/schemas/ServerStatus'
+          pattern: '^\d+\.\d+\.\d+(-[\w\d\-.]+)?(\+[\w\d\-.]+)?$'
+        websiteUrl:
+          type: string
+          format: uri
         repository:
           $ref: '#/components/schemas/Repository'
         packages:
           type: array
           items:
             $ref: '#/components/schemas/Package'
-        remote:
-          $ref: '#/components/schemas/RemoteConfig'
-        metadata:
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteConfig'
+        _meta:
           type: object
           additionalProperties: true
 
+    StatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/ServerStatus'
+        statusMessage:
+          type: string
+          maxLength: 500
+
     ServerListResponse:
       type: object
-      required: [servers, pagination]
+      required: [servers, metadata]
       properties:
         servers:
           type: array
           items:
             $ref: '#/components/schemas/MCPServer'
-        pagination:
+        metadata:
           $ref: '#/components/schemas/PaginationInfo'
+
+    AllVersionsStatusResponse:
+      type: object
+      required: [updatedCount, servers]
+      properties:
+        updatedCount:
+          type: integer
+          minimum: 0
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPServer'
 
     PaginationInfo:
       type: object
-      required: [total, limit, offset, has_more]
+      required: [count]
       properties:
-        total:
+        count:
           type: integer
           minimum: 0
-        limit:
-          type: integer
-          minimum: 1
-        offset:
-          type: integer
-          minimum: 0
-        has_more:
-          type: boolean
+          description: Total number of matching servers
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page; absent when there are no more results
 
     # Authentication Types
     User:

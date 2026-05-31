@@ -29,7 +29,7 @@
     "test:integration": "jest --testPathPattern=integration",
     "test:e2e": "jest --testPathPattern=e2e",
     "test:ci": "jest --coverage --watchAll=false --ci",
-    "docker:build": "docker build -t mcp-sub-registry-api .",
+    "docker:build": "docker build -f ../../Dockerfile -t mcp-sub-registry-api ../..",
     "docker:run": "docker run -p 3010:3010 mcp-sub-registry-api",
     "health-check": "curl -f http://localhost:3010/health || exit 1"
   },

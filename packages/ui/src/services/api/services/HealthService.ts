@@ -21,7 +21,7 @@ export class HealthService {
     public getV0Health(): CancelablePromise<MCPHealthResponse> {
         return this.httpRequest.request({
             method: 'GET',
-            url: '/v0/health',
+            url: '/v0.1/health',
         });
     }
 

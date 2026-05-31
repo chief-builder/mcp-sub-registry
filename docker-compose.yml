@@ -37,8 +37,8 @@ services:
 
   ui:
     build:
-      context: ./packages/ui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: packages/ui/Dockerfile
     ports:
       - "5173:5173"
     environment:

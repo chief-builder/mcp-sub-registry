@@ -184,7 +184,7 @@ export function ApiKeysPage() {
                       )}
                       <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                         <span>Created: {new Date(key.created_at).toLocaleDateString()}</span>
-                        <span>Last Used: {key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'}</span>
+                        <span>Last Used: {key.last_used ? new Date(key.last_used).toLocaleDateString() : 'Never'}</span>
                       </div>
                     </div>
                     <div className="flex space-x-2">

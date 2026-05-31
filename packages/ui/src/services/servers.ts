@@ -1,12 +1,11 @@
-// Server Management Service Wrapper
+// Server Management Service Wrapper (MCP Registry v0.1)
 import { ServersService } from './api/services/ServersService';
 import { AxiosHttpRequest } from './api/core/AxiosHttpRequest';
 import { OpenAPI } from './api/core/OpenAPI';
-import type { 
-  MCPServer, 
-  PublishServerRequest, 
+import type {
+  MCPServer,
+  PublishServerRequest,
   ServerListResponse,
-  ServerStatus
 } from './api/models';
 
 // Create httpRequest dynamically to get latest token
@@ -24,34 +23,44 @@ const createHttpRequest = () => new AxiosHttpRequest({
 
 export interface ServerFilters {
   limit?: number;
-  offset?: number;
-  status?: ServerStatus;
+  cursor?: string;
   search?: string;
+  version?: string;
+  updatedSince?: string;
+  includeDeleted?: boolean;
 }
 
 export const ServerService = {
   /**
-   * Get list of servers with optional filtering
+   * Get a cursor-paginated list of servers (latest version of each).
    */
   async getServers(filters: ServerFilters = {}): Promise<ServerListResponse> {
     const serversService = new ServersService(createHttpRequest());
-    return serversService.getV0Servers(filters);
+    return serversService.getServers(filters);
   },
 
   /**
-   * Get server by ID
+   * Get the latest version of a server by name.
    */
-  async getServer(id: string): Promise<MCPServer> {
+  async getServer(serverName: string): Promise<MCPServer> {
     const serversService = new ServersService(createHttpRequest());
-    return serversService.getV0Servers1({ id });
+    return serversService.getServerVersion({ serverName });
   },
 
   /**
-   * Publish new server
+   * List all versions of a server, newest first.
+   */
+  async getServerVersions(serverName: string): Promise<ServerListResponse> {
+    const serversService = new ServersService(createHttpRequest());
+    return serversService.getServerVersions({ serverName });
+  },
+
+  /**
+   * Publish a new server version.
    */
   async publishServer(data: PublishServerRequest): Promise<MCPServer> {
     const serversService = new ServersService(createHttpRequest());
-    return serversService.postV0Publish({ requestBody: data });
+    return serversService.publishServer({ requestBody: data });
   }
 };
 

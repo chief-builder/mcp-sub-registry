@@ -13,7 +13,7 @@ import { useServers } from '../services/api/hooks/useServers';
 export function AdminPage() {
   // Fetch servers to get counts
   const { data: serversData } = useServers({ limit: 1 }); // Just to get total count
-  const totalServers = (serversData as any)?.total_count || 0;
+  const totalServers = serversData?.metadata?.count || 0;
 
   // Mock data for now - these would come from API endpoints
   const stats = {
