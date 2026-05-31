@@ -143,6 +143,98 @@ export const userLoginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+// Roles an admin may assign to a user.
+export const VALID_ROLES = ['admin', 'publisher', 'approver', 'consumer', 'reader'];
+
+const strongPassword = Joi.string().min(8).max(128)
+  .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]'))
+  .messages({
+    'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+  });
+
+// Admin creates a user.
+export const userCreateSchema = Joi.object({
+  email: Joi.string().email().required(),
+  username: Joi.string().alphanum().min(3).max(30).required(),
+  password: strongPassword.optional(),
+  roles: Joi.array().items(Joi.string().valid(...VALID_ROLES)).min(1).default(['consumer']),
+  is_active: Joi.boolean().default(true),
+  metadata: Joi.object().optional(),
+});
+
+// Admin updates a user (all fields optional).
+export const userUpdateSchema = Joi.object({
+  email: Joi.string().email().optional(),
+  username: Joi.string().alphanum().min(3).max(30).optional(),
+  password: strongPassword.optional(),
+  roles: Joi.array().items(Joi.string().valid(...VALID_ROLES)).min(1).optional(),
+  is_active: Joi.boolean().optional(),
+  metadata: Joi.object().optional(),
+}).min(1);
+
+// Registry-wide settings. Defaults are returned when nothing is stored.
+// NOTE: the admin setup key is a server-side bootstrap secret and is never
+// part of this surface.
+export const DEFAULT_SETTINGS = {
+  // General
+  siteName: 'MCP Registry',
+  siteDescription: 'Enterprise Server Discovery',
+  maintenanceMode: false,
+  allowRegistration: true,
+  requireEmailVerification: true,
+  // Security
+  sessionTimeout: 24,
+  maxLoginAttempts: 5,
+  passwordMinLength: 8,
+  requireStrongPassword: true,
+  // API
+  apiRateLimit: 1000,
+  apiTimeout: 30,
+  maxPageSize: 100,
+  defaultPageSize: 20,
+  corsEnabled: true,
+  // Notifications
+  emailNotifications: true,
+  adminNotificationEmail: 'admin@company.com',
+  notifyOnServerPublish: true,
+  notifyOnUserRegistration: true,
+  notifyOnApiKeyCreation: false,
+  // Servers
+  autoApproveServers: false,
+  requireServerReview: true,
+  maxServerNameLength: 255,
+  maxDescriptionLength: 1000,
+  allowedServerStatuses: ['active', 'deprecated', 'deleted'],
+};
+
+// Partial settings update — every key optional, unknown keys rejected.
+export const settingsUpdateSchema = Joi.object({
+  siteName: Joi.string().max(200),
+  siteDescription: Joi.string().max(500),
+  maintenanceMode: Joi.boolean(),
+  allowRegistration: Joi.boolean(),
+  requireEmailVerification: Joi.boolean(),
+  sessionTimeout: Joi.number().integer().min(1).max(720),
+  maxLoginAttempts: Joi.number().integer().min(1).max(20),
+  passwordMinLength: Joi.number().integer().min(6).max(64),
+  requireStrongPassword: Joi.boolean(),
+  apiRateLimit: Joi.number().integer().min(10).max(100000),
+  apiTimeout: Joi.number().integer().min(1).max(300),
+  maxPageSize: Joi.number().integer().min(1).max(1000),
+  defaultPageSize: Joi.number().integer().min(1).max(1000),
+  corsEnabled: Joi.boolean(),
+  emailNotifications: Joi.boolean(),
+  adminNotificationEmail: Joi.string().email(),
+  notifyOnServerPublish: Joi.boolean(),
+  notifyOnUserRegistration: Joi.boolean(),
+  notifyOnApiKeyCreation: Joi.boolean(),
+  autoApproveServers: Joi.boolean(),
+  requireServerReview: Joi.boolean(),
+  maxServerNameLength: Joi.number().integer().min(50).max(500),
+  maxDescriptionLength: Joi.number().integer().min(100).max(5000),
+  allowedServerStatuses: Joi.array().items(Joi.string().valid('active', 'deprecated', 'deleted')),
+}).min(1);
+
 // Validation middleware factory
 export function validateBody(schema: Joi.ObjectSchema) {
   return (req: Request, res: Response, next: NextFunction) => {

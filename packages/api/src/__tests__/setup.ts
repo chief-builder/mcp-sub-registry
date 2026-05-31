@@ -11,6 +11,7 @@ process.env.DATABASE_URL = 'postgresql://postgres:postgres123@localhost:5435/mcp
 
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 // Global test database instance
 declare global {
@@ -102,6 +103,19 @@ export const testUtils = {
   },
 
   /**
+   * Create a user and a signed JWT for it (for JWT-only routes).
+   */
+  createJwtAuth: async (roles: string[] = ['admin']) => {
+    const user = await testUtils.createTestUser({ roles, is_active: true });
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, roles },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+    return { user, token, headers: { Authorization: `Bearer ${token}` } };
+  },
+
+  /**
    * Create a test MCP server directly in the DB (v0.1 server.json shape).
    */
   createTestServer: async (_ownerId: string, overrides: Record<string, any> = {}) => {
@@ -133,14 +147,17 @@ export const testUtils = {
   },
 
   /**
-   * Clean up test data
+   * Clean up all test data. The test database is dedicated and recreated each
+   * run, so we remove everything (not just `test-` rows) and in FK-safe order
+   * so API-created users/settings never linger between tests.
    */
   cleanup: async () => {
+    await prisma.auditLog.deleteMany({}); // drop actor references first
     await prisma.server.deleteMany({});
     await prisma.apiKey.deleteMany({});
-    await prisma.namespace.deleteMany({});
-    await prisma.user.deleteMany({ where: { email: { contains: 'test-' } } });
-    await prisma.auditLog.deleteMany({});
+    await prisma.namespace.deleteMany({}); // releases owner_id references
+    await prisma.setting.deleteMany({});
+    await prisma.user.deleteMany({});
   },
 
   /**
@@ -159,6 +176,7 @@ declare global {
     createTestApiKey: (userId: string, scopes?: string[]) => Promise<{ apiKey: any; key: string; }>;
     createNamespace: (name: string, ownerId: string, authorizedUsers?: string[]) => Promise<any>;
     createTestAuth: (scopes?: string[]) => Promise<{ user: any; apiKey: any; key: string; headers: { Authorization: string; }; }>;
+    createJwtAuth: (roles?: string[]) => Promise<{ user: any; token: string; headers: { Authorization: string; }; }>;
     createTestServer: (ownerId: string, overrides?: any) => Promise<any>;
     cleanup: () => Promise<void>;
     delay: (ms: number) => Promise<unknown>;

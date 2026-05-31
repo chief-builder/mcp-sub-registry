@@ -1,6 +1,7 @@
 // React import removed - JSX transform handles it
-import { useState } from 'react';
-import { 
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
+import {
   CogIcon,
   BellIcon,
   ShieldCheckIcon,
@@ -9,10 +10,19 @@ import {
   CheckIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
+import { useSettings, useUpdateSettings } from '../services/api/hooks/useSettings';
+
+function errMessage(e: unknown): string {
+  const anyE = e as any;
+  return anyE?.body?.error || anyE?.message || 'Failed to save settings';
+}
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
   const [saved, setSaved] = useState(false);
+
+  const { data: settingsData, isLoading } = useSettings();
+  const updateSettings = useUpdateSettings();
 
   // Settings state
   const [settings, setSettings] = useState({
@@ -50,14 +60,25 @@ export function SettingsPage() {
     requireServerReview: true,
     maxServerNameLength: 255,
     maxDescriptionLength: 1000,
-    allowedServerStatuses: ['experimental', 'beta', 'stable', 'deprecated'],
+    allowedServerStatuses: ['active', 'deprecated', 'deleted'],
   });
 
-  const handleSave = () => {
-    // TODO(Phase 2): persist via an authenticated, admin-only settings API.
-    // Until then, do not log the settings object (it may contain secrets).
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  // Sync local state with the persisted settings once loaded.
+  useEffect(() => {
+    if (settingsData?.settings) {
+      setSettings((prev) => ({ ...prev, ...settingsData.settings }));
+    }
+  }, [settingsData]);
+
+  const handleSave = async () => {
+    try {
+      await updateSettings.mutateAsync(settings);
+      setSaved(true);
+      toast.success('Settings saved');
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      toast.error(errMessage(err));
+    }
   };
 
   const tabs = [
@@ -364,7 +385,7 @@ export function SettingsPage() {
       <div>
         <h3 className="text-sm font-medium text-gray-700 mb-3">Allowed Server Statuses</h3>
         <div className="space-y-2">
-          {['experimental', 'beta', 'stable', 'deprecated', 'archived'].map((status) => (
+          {['active', 'deprecated', 'deleted'].map((status) => (
             <label key={status} className="flex items-center">
               <input
                 type="checkbox"
@@ -443,9 +464,8 @@ export function SettingsPage() {
                   )}
                 </div>
                 <div className="flex space-x-3">
-                  <button className="btn-secondary">Reset</button>
-                  <button onClick={handleSave} className="btn-primary">
-                    Save Changes
+                  <button onClick={handleSave} className="btn-primary" disabled={isLoading || updateSettings.isPending}>
+                    {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>

@@ -11,6 +11,8 @@ import metricsRoutes from './routes/metrics';
 import authRoutes from './routes/auth';
 import apiKeyRoutes from './routes/api-keys';
 import namespaceRoutes from './routes/namespaces';
+import userRoutes from './routes/users';
+import settingsRoutes from './routes/settings';
 
 const app = express();
 
@@ -54,6 +56,8 @@ app.use('/metrics', metricsRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/api-keys', apiKeyRoutes);
 app.use('/api/v1/namespaces', namespaceRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/settings', settingsRoutes);
 
 // Health check for load balancers
 app.get('/health', (_req, res) => {
