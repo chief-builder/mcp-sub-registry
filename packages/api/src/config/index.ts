@@ -24,6 +24,17 @@ interface Config {
   };
 }
 
+// Known placeholder/example values that must never be accepted as real secrets.
+const PLACEHOLDER_SECRETS = [
+  'your-secure-jwt-secret-here',
+  'your-secure-jwt-secret-here-minimum-32-characters',
+  'your-admin-setup-key-for-production',
+  'development-admin-key-change-in-production',
+  'changeme',
+];
+
+const VALID_NODE_ENVS = ['development', 'test', 'production'];
+
 function validateEnv(): Config {
   const required = {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -36,6 +47,12 @@ function validateEnv(): Config {
 
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  // Validate NODE_ENV is a recognized value (default to development only when unset)
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  if (!VALID_NODE_ENVS.includes(nodeEnv)) {
+    throw new Error(`NODE_ENV must be one of: ${VALID_NODE_ENVS.join(', ')} (got "${nodeEnv}")`);
   }
 
   // Validate JWT_SECRET strength
@@ -55,7 +72,7 @@ function validateEnv(): Config {
 
   return {
     port,
-    nodeEnv: process.env.NODE_ENV || 'development',
+    nodeEnv,
     database: {
       url: required.DATABASE_URL!,
     },
@@ -85,10 +102,22 @@ export const isTest = config.nodeEnv === 'test';
 
 // Runtime configuration validation
 if (isProduction) {
-  if (config.jwt.secret === 'your-secure-jwt-secret-here') {
-    throw new Error('Production JWT_SECRET must be changed from default value');
+  if (PLACEHOLDER_SECRETS.includes(config.jwt.secret)) {
+    throw new Error('Production JWT_SECRET must be changed from its example/placeholder value');
   }
-  
+
+  // ADMIN_SETUP_KEY is required in production: the admin-bootstrap registration
+  // flow depends on it, and a missing/weak key would otherwise fail open.
+  if (!config.admin.setupKey) {
+    throw new Error('ADMIN_SETUP_KEY is required in production');
+  }
+  if (config.admin.setupKey.length < 32) {
+    throw new Error('ADMIN_SETUP_KEY must be at least 32 characters long in production');
+  }
+  if (PLACEHOLDER_SECRETS.includes(config.admin.setupKey)) {
+    throw new Error('Production ADMIN_SETUP_KEY must be changed from its example/placeholder value');
+  }
+
   if (config.database.url.includes('localhost')) {
     console.warn('⚠️  WARNING: Using localhost database URL in production');
   }

@@ -6,10 +6,11 @@ import { logger } from './utils/logger';
 import { isProduction } from './config';
 import { globalRateLimit } from './middleware/security';
 
-import v0Routes from './routes/v0';
+import v0_1Routes from './routes/v0_1';
 import metricsRoutes from './routes/metrics';
 import authRoutes from './routes/auth';
 import apiKeyRoutes from './routes/api-keys';
+import namespaceRoutes from './routes/namespaces';
 
 const app = express();
 
@@ -48,10 +49,11 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Routes
-app.use('/v0', v0Routes);
+app.use('/v0.1', v0_1Routes);
 app.use('/metrics', metricsRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/api-keys', apiKeyRoutes);
+app.use('/api/v1/namespaces', namespaceRoutes);
 
 // Health check for load balancers
 app.get('/health', (_req, res) => {

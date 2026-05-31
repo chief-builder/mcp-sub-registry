@@ -43,7 +43,7 @@ function App() {
         <Route path="/" element={<AppLayout />}>
           <Route index element={<HomePage />} />
           <Route path="servers" element={<ServersPage />} />
-          <Route path="servers/:id" element={<ServerDetailPage />} />
+          <Route path="servers/:serverName" element={<ServerDetailPage />} />
           <Route 
             path="servers/publish" 
             element={isAuthenticated ? <PublishServerPage /> : <Navigate to="/auth/login" />} 

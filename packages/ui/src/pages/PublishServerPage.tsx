@@ -1,226 +1,193 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePublishServer } from '../services/api/hooks/useServers';
-import type { PublishServerRequest, Repository, Package, RemoteConfig, ServerStatus } from '../services/api/models';
+import type { PublishServerRequest, Repository, Package, RemoteConfig } from '../services/api/models';
+
+const SCHEMA_URL = 'https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json';
+
+type BasicInfo = {
+  name: string;
+  title: string;
+  description: string;
+  version: string;
+  websiteUrl: string;
+};
 
 export function PublishServerPage() {
   const navigate = useNavigate();
   const publishServer = usePublishServer();
   const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState<PublishServerRequest>({
+
+  const [basic, setBasic] = useState<BasicInfo>({
     name: '',
+    title: '',
     description: '',
     version: '',
-    status: 'experimental' as ServerStatus,
-    repository: undefined,
-    packages: [],
-    remote: undefined,
-    metadata: {}
+    websiteUrl: '',
   });
 
-  const [repository, setRepository] = useState<Repository>({
-    type: 'git',
-    url: '',
-    branch: '',
-    tag: '',
-    commit: ''
-  });
-
+  const [repository, setRepository] = useState<Repository>({ url: '', source: 'github', subfolder: '' });
   const [packages, setPackages] = useState<Package[]>([]);
-  const [remote, setRemote] = useState<RemoteConfig>({
-    transport: 'stdio',
-    url: '',
-    host: '',
-    port: undefined,
-    path: ''
-  });
+  const [remotes, setRemotes] = useState<RemoteConfig[]>([]);
 
   const [includeRepository, setIncludeRepository] = useState(false);
   const [includePackages, setIncludePackages] = useState(false);
-  const [includeRemote, setIncludeRemote] = useState(false);
+  const [includeRemotes, setIncludeRemotes] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       const serverData: PublishServerRequest = {
-        ...formData,
-        repository: includeRepository ? repository : undefined,
-        packages: includePackages ? packages : undefined,
-        remote: includeRemote ? remote : undefined
+        $schema: SCHEMA_URL,
+        name: basic.name,
+        description: basic.description,
+        version: basic.version,
+        ...(basic.title ? { title: basic.title } : {}),
+        ...(basic.websiteUrl ? { websiteUrl: basic.websiteUrl } : {}),
+        ...(includeRepository ? { repository: { ...repository, subfolder: repository.subfolder || undefined } } : {}),
+        ...(includePackages && packages.length ? { packages } : {}),
+        ...(includeRemotes && remotes.length ? { remotes } : {}),
       };
-      
+
       const result = await publishServer.mutateAsync(serverData);
-      navigate(`/servers/${result.id}`);
+      navigate(`/servers/${encodeURIComponent(result.name)}`);
     } catch (error) {
       console.error('Failed to publish server:', error);
     }
   };
 
+  // --- packages helpers ---
   const addPackage = () => {
     setPackages([...packages, {
-      registry: 'npm',
+      registryType: 'npm',
+      registryBaseUrl: 'https://registry.npmjs.org',
       identifier: '',
       version: '',
-      url: ''
+      transport: { type: 'stdio' },
     }]);
   };
-
-  const removePackage = (index: number) => {
-    setPackages(packages.filter((_, i) => i !== index));
+  const removePackage = (index: number) => setPackages(packages.filter((_, i) => i !== index));
+  const updatePackage = (index: number, patch: Partial<Package>) => {
+    setPackages(packages.map((p, i) => (i === index ? { ...p, ...patch } : p)));
   };
 
-  const updatePackage = (index: number, field: keyof Package, value: string) => {
-    const updatedPackages = [...packages];
-    if (field === 'registry') {
-      updatedPackages[index][field] = value as Package['registry'];
-    } else {
-      (updatedPackages[index] as any)[field] = value;
-    }
-    setPackages(updatedPackages);
+  // --- remotes helpers ---
+  const addRemote = () => setRemotes([...remotes, { type: 'streamable-http', url: '' }]);
+  const removeRemote = (index: number) => setRemotes(remotes.filter((_, i) => i !== index));
+  const updateRemote = (index: number, patch: Partial<RemoteConfig>) => {
+    setRemotes(remotes.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   };
 
   const renderStep1 = () => (
     <div className="space-y-6">
       <div>
         <label className="form-label">Server Name *</label>
-        <input 
-          type="text" 
+        <input
+          type="text"
           className="form-input"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="com.company.mcp-server"
-          pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+          value={basic.name}
+          onChange={(e) => setBasic({ ...basic, name: e.target.value })}
+          placeholder="io.github.your-org/your-server"
+          pattern="^[a-zA-Z0-9.\-]+/[a-zA-Z0-9._\-]+$"
           required
         />
         <p className="form-help">
-          Use reverse DNS format (e.g., com.company.mcp-server). Only lowercase letters, numbers, dots, and hyphens allowed.
+          Format: <code>&lt;reverse-dns-namespace&gt;/&lt;name&gt;</code> (e.g. <code>io.github.your-org/your-server</code>).
+          You must own or be authorized for the namespace.
         </p>
       </div>
-      
+
+      <div>
+        <label className="form-label">Title</label>
+        <input
+          type="text"
+          className="form-input"
+          value={basic.title}
+          onChange={(e) => setBasic({ ...basic, title: e.target.value })}
+          placeholder="Human-readable display name"
+        />
+      </div>
+
       <div>
         <label className="form-label">Version *</label>
-        <input 
-          type="text" 
+        <input
+          type="text"
           className="form-input"
-          value={formData.version}
-          onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+          value={basic.version}
+          onChange={(e) => setBasic({ ...basic, version: e.target.value })}
           placeholder="1.0.0"
-          pattern="^\d+\.\d+\.\d+(-[\w\d\-_]+)?(\+[\w\d\-_]+)?$"
+          pattern="^\d+\.\d+\.\d+(-[\w\d\-.]+)?(\+[\w\d\-.]+)?$"
           required
         />
-        <p className="form-help">
-          Semantic version format (e.g., 1.0.0, 1.0.0-beta, 1.0.0+build.1)
-        </p>
+        <p className="form-help">Semantic version (e.g. 1.0.0, 1.0.0-beta).</p>
       </div>
-      
+
       <div>
         <label className="form-label">Description *</label>
-        <textarea 
+        <textarea
           className="form-input"
           rows={4}
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          value={basic.description}
+          onChange={(e) => setBasic({ ...basic, description: e.target.value })}
           placeholder="A brief description of what this MCP server provides..."
-          minLength={10}
-          maxLength={500}
+          maxLength={1000}
           required
         />
-        <p className="form-help">
-          {formData.description.length}/500 characters. Minimum 10 characters required.
-        </p>
+        <p className="form-help">{basic.description.length}/1000 characters.</p>
       </div>
-      
+
       <div>
-        <label className="form-label">Status *</label>
-        <select 
+        <label className="form-label">Website URL</label>
+        <input
+          type="url"
           className="form-input"
-          value={formData.status}
-          onChange={(e) => setFormData({ ...formData, status: e.target.value as ServerStatus })}
-          required
-        >
-          <option value="experimental">Experimental - Early development, may have breaking changes</option>
-          <option value="beta">Beta - Feature complete, testing for stability</option>
-          <option value="stable">Stable - Production ready and reliable</option>
-          <option value="deprecated">Deprecated - No longer maintained</option>
-        </select>
+          value={basic.websiteUrl}
+          onChange={(e) => setBasic({ ...basic, websiteUrl: e.target.value })}
+          placeholder="https://docs.example.com/your-server"
+        />
       </div>
     </div>
   );
 
   const renderStep2 = () => (
     <div className="space-y-6">
-      <div>
-        <label className="flex items-center">
-          <input 
-            type="checkbox"
-            checked={includeRepository}
-            onChange={(e) => setIncludeRepository(e.target.checked)}
-            className="mr-2"
-          />
-          <span className="form-label mb-0">Include Repository Information</span>
-        </label>
-        <p className="form-help">Link to your source code repository for transparency and contributions.</p>
-      </div>
-      
+      <label className="flex items-center">
+        <input type="checkbox" checked={includeRepository} onChange={(e) => setIncludeRepository(e.target.checked)} className="mr-2" />
+        <span className="form-label mb-0">Include Repository Information</span>
+      </label>
+
       {includeRepository && (
         <div className="pl-6 border-l-2 border-gray-200 space-y-4">
           <div>
-            <label className="form-label">Repository Type</label>
-            <select 
-              className="form-input"
-              value={repository.type}
-              onChange={(e) => setRepository({ ...repository, type: e.target.value as Repository['type'] })}
-            >
-              <option value="git">Git</option>
-              <option value="mercurial">Mercurial</option>
-              <option value="svn">Subversion</option>
-            </select>
-          </div>
-          
-          <div>
             <label className="form-label">Repository URL *</label>
-            <input 
-              type="url" 
+            <input
+              type="url"
               className="form-input"
               value={repository.url}
               onChange={(e) => setRepository({ ...repository, url: e.target.value })}
-              placeholder="https://github.com/company/mcp-server"
+              placeholder="https://github.com/your-org/your-server"
               required={includeRepository}
             />
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="form-label">Branch</label>
-              <input 
-                type="text" 
+              <label className="form-label">Source</label>
+              <input
+                type="text"
                 className="form-input"
-                value={repository.branch || ''}
-                onChange={(e) => setRepository({ ...repository, branch: e.target.value })}
-                placeholder="main"
+                value={repository.source}
+                onChange={(e) => setRepository({ ...repository, source: e.target.value })}
+                placeholder="github"
               />
             </div>
-            
             <div>
-              <label className="form-label">Tag</label>
-              <input 
-                type="text" 
+              <label className="form-label">Subfolder (monorepos)</label>
+              <input
+                type="text"
                 className="form-input"
-                value={repository.tag || ''}
-                onChange={(e) => setRepository({ ...repository, tag: e.target.value })}
-                placeholder="v1.0.0"
-              />
-            </div>
-            
-            <div>
-              <label className="form-label">Commit</label>
-              <input 
-                type="text" 
-                className="form-input"
-                value={repository.commit || ''}
-                onChange={(e) => setRepository({ ...repository, commit: e.target.value })}
-                placeholder="abc123..."
+                value={repository.subfolder || ''}
+                onChange={(e) => setRepository({ ...repository, subfolder: e.target.value })}
+                placeholder="packages/server"
               />
             </div>
           </div>
@@ -231,102 +198,105 @@ export function PublishServerPage() {
 
   const renderStep3 = () => (
     <div className="space-y-6">
-      <div>
-        <label className="flex items-center">
-          <input 
-            type="checkbox"
-            checked={includePackages}
-            onChange={(e) => setIncludePackages(e.target.checked)}
-            className="mr-2"
-          />
-          <span className="form-label mb-0">Include Package Information</span>
-        </label>
-        <p className="form-help">Specify how users can install and run your MCP server.</p>
-      </div>
-      
+      <label className="flex items-center">
+        <input type="checkbox" checked={includePackages} onChange={(e) => setIncludePackages(e.target.checked)} className="mr-2" />
+        <span className="form-label mb-0">Include Package Information</span>
+      </label>
+
       {includePackages && (
         <div className="pl-6 border-l-2 border-gray-200 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-medium">Packages</h3>
-            <button 
-              type="button"
-              onClick={addPackage}
-              className="btn-secondary"
-            >
-              Add Package
-            </button>
+            <button type="button" onClick={addPackage} className="btn-secondary">Add Package</button>
           </div>
-          
-          {packages.map((pkg, index) => (
-            <div key={index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex justify-between items-start mb-4">
-                <h4 className="font-medium">Package {index + 1}</h4>
-                <button 
-                  type="button"
-                  onClick={() => removePackage(index)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  Remove
-                </button>
+
+          {packages.map((pkg, index) => {
+            const needsBaseUrl = pkg.registryType !== 'oci' && pkg.registryType !== 'mcpb';
+            const needsTransportUrl = pkg.transport.type !== 'stdio';
+            return (
+              <div key={index} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-start mb-4">
+                  <h4 className="font-medium">Package {index + 1}</h4>
+                  <button type="button" onClick={() => removePackage(index)} className="text-red-600 hover:text-red-800">Remove</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label">Registry Type</label>
+                    <select
+                      className="form-input"
+                      value={pkg.registryType}
+                      onChange={(e) => updatePackage(index, { registryType: e.target.value as Package['registryType'] })}
+                    >
+                      <option value="npm">npm</option>
+                      <option value="nuget">NuGet</option>
+                      <option value="pypi">PyPI</option>
+                      <option value="oci">OCI</option>
+                      <option value="mcpb">MCPB</option>
+                    </select>
+                  </div>
+                  {needsBaseUrl && (
+                    <div>
+                      <label className="form-label">Registry Base URL</label>
+                      <input
+                        type="url"
+                        className="form-input"
+                        value={pkg.registryBaseUrl || ''}
+                        onChange={(e) => updatePackage(index, { registryBaseUrl: e.target.value })}
+                        placeholder="https://registry.npmjs.org"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="form-label">Package Identifier</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={pkg.identifier}
+                      onChange={(e) => updatePackage(index, { identifier: e.target.value })}
+                      placeholder="@your-org/your-server"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Version</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={pkg.version}
+                      onChange={(e) => updatePackage(index, { version: e.target.value })}
+                      placeholder="1.0.0"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Transport</label>
+                    <select
+                      className="form-input"
+                      value={pkg.transport.type}
+                      onChange={(e) => updatePackage(index, { transport: { ...pkg.transport, type: e.target.value as Package['transport']['type'] } })}
+                    >
+                      <option value="stdio">stdio</option>
+                      <option value="streamable-http">streamable-http</option>
+                      <option value="sse">sse</option>
+                    </select>
+                  </div>
+                  {needsTransportUrl && (
+                    <div>
+                      <label className="form-label">Transport URL</label>
+                      <input
+                        type="url"
+                        className="form-input"
+                        value={pkg.transport.url || ''}
+                        onChange={(e) => updatePackage(index, { transport: { ...pkg.transport, url: e.target.value } })}
+                        placeholder="https://localhost/mcp"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Registry</label>
-                  <select 
-                    className="form-input"
-                    value={pkg.registry}
-                    onChange={(e) => updatePackage(index, 'registry', e.target.value)}
-                  >
-                    <option value="npm">NPM</option>
-                    <option value="pypi">PyPI</option>
-                    <option value="maven">Maven</option>
-                    <option value="docker">Docker</option>
-                    <option value="cargo">Cargo</option>
-                    <option value="gem">RubyGems</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="form-label">Package Identifier</label>
-                  <input 
-                    type="text" 
-                    className="form-input"
-                    value={pkg.identifier}
-                    onChange={(e) => updatePackage(index, 'identifier', e.target.value)}
-                    placeholder="@company/mcp-server"
-                  />
-                </div>
-                
-                <div>
-                  <label className="form-label">Version</label>
-                  <input 
-                    type="text" 
-                    className="form-input"
-                    value={pkg.version}
-                    onChange={(e) => updatePackage(index, 'version', e.target.value)}
-                    placeholder="1.0.0"
-                  />
-                </div>
-                
-                <div>
-                  <label className="form-label">Direct URL (optional)</label>
-                  <input 
-                    type="url" 
-                    className="form-input"
-                    value={pkg.url || ''}
-                    onChange={(e) => updatePackage(index, 'url', e.target.value)}
-                    placeholder="https://..."
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-          
+            );
+          })}
+
           {packages.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No packages added yet. Click "Add Package" to get started.
-            </div>
+            <div className="text-center py-8 text-gray-500">No packages added yet. Click "Add Package" to get started.</div>
           )}
         </div>
       )}
@@ -335,85 +305,54 @@ export function PublishServerPage() {
 
   const renderStep4 = () => (
     <div className="space-y-6">
-      <div>
-        <label className="flex items-center">
-          <input 
-            type="checkbox"
-            checked={includeRemote}
-            onChange={(e) => setIncludeRemote(e.target.checked)}
-            className="mr-2"
-          />
-          <span className="form-label mb-0">Include Remote Configuration</span>
-        </label>
-        <p className="form-help">Specify how clients can connect to your MCP server remotely.</p>
-      </div>
-      
-      {includeRemote && (
+      <label className="flex items-center">
+        <input type="checkbox" checked={includeRemotes} onChange={(e) => setIncludeRemotes(e.target.checked)} className="mr-2" />
+        <span className="form-label mb-0">Include Remote Endpoints</span>
+      </label>
+      <p className="form-help">A server must declare at least one package or one remote.</p>
+
+      {includeRemotes && (
         <div className="pl-6 border-l-2 border-gray-200 space-y-4">
-          <div>
-            <label className="form-label">Transport Protocol</label>
-            <select 
-              className="form-input"
-              value={remote.transport}
-              onChange={(e) => setRemote({ ...remote, transport: e.target.value as RemoteConfig['transport'] })}
-            >
-              <option value="stdio">Standard I/O</option>
-              <option value="http">HTTP</option>
-              <option value="https">HTTPS</option>
-              <option value="tcp">TCP</option>
-              <option value="websocket">WebSocket</option>
-            </select>
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-medium">Remotes</h3>
+            <button type="button" onClick={addRemote} className="btn-secondary">Add Remote</button>
           </div>
-          
-          {(remote.transport === 'http' || remote.transport === 'https' || remote.transport === 'websocket') && (
-            <div>
-              <label className="form-label">URL</label>
-              <input 
-                type="url" 
-                className="form-input"
-                value={remote.url || ''}
-                onChange={(e) => setRemote({ ...remote, url: e.target.value })}
-                placeholder="https://api.company.com/mcp"
-              />
-            </div>
-          )}
-          
-          {remote.transport === 'tcp' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Host</label>
-                <input 
-                  type="text" 
-                  className="form-input"
-                  value={remote.host || ''}
-                  onChange={(e) => setRemote({ ...remote, host: e.target.value })}
-                  placeholder="localhost"
-                />
+
+          {remotes.map((remote, index) => (
+            <div key={index} className="border border-gray-200 rounded-lg p-4">
+              <div className="flex justify-between items-start mb-4">
+                <h4 className="font-medium">Remote {index + 1}</h4>
+                <button type="button" onClick={() => removeRemote(index)} className="text-red-600 hover:text-red-800">Remove</button>
               </div>
-              
-              <div>
-                <label className="form-label">Port</label>
-                <input 
-                  type="number" 
-                  className="form-input"
-                  value={remote.port || ''}
-                  onChange={(e) => setRemote({ ...remote, port: parseInt(e.target.value) || undefined })}
-                  placeholder="8080"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Type</label>
+                  <select
+                    className="form-input"
+                    value={remote.type}
+                    onChange={(e) => updateRemote(index, { type: e.target.value as RemoteConfig['type'] })}
+                  >
+                    <option value="streamable-http">streamable-http</option>
+                    <option value="sse">sse</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">URL</label>
+                  <input
+                    type="url"
+                    className="form-input"
+                    value={remote.url}
+                    onChange={(e) => updateRemote(index, { url: e.target.value })}
+                    placeholder="https://api.example.com/mcp"
+                  />
+                </div>
               </div>
             </div>
+          ))}
+
+          {remotes.length === 0 && (
+            <div className="text-center py-8 text-gray-500">No remotes added yet. Click "Add Remote" to get started.</div>
           )}
-          
-          <div>
-            <label className="form-label">Path</label>
-            <input 
-              type="text" 
-              className="form-input"
-              value={remote.path || ''}
-              onChange={(e) => setRemote({ ...remote, path: e.target.value })}
-              placeholder="/mcp"
-            />
-          </div>
         </div>
       )}
     </div>
@@ -429,82 +368,52 @@ export function PublishServerPage() {
           <div>
             <h4 className="font-medium text-gray-900">Basic Information</h4>
             <dl className="mt-2 text-sm">
-              <div className="flex justify-between py-1">
-                <dt className="text-gray-500">Name:</dt>
-                <dd className="text-gray-900">{formData.name}</dd>
-              </div>
-              <div className="flex justify-between py-1">
-                <dt className="text-gray-500">Version:</dt>
-                <dd className="text-gray-900">{formData.version}</dd>
-              </div>
-              <div className="flex justify-between py-1">
-                <dt className="text-gray-500">Status:</dt>
-                <dd className="text-gray-900">{formData.status}</dd>
-              </div>
+              <div className="flex justify-between py-1"><dt className="text-gray-500">Name:</dt><dd className="text-gray-900">{basic.name}</dd></div>
+              {basic.title && <div className="flex justify-between py-1"><dt className="text-gray-500">Title:</dt><dd className="text-gray-900">{basic.title}</dd></div>}
+              <div className="flex justify-between py-1"><dt className="text-gray-500">Version:</dt><dd className="text-gray-900">{basic.version}</dd></div>
+              {basic.websiteUrl && <div className="flex justify-between py-1"><dt className="text-gray-500">Website:</dt><dd className="text-gray-900 break-all">{basic.websiteUrl}</dd></div>}
             </dl>
             <div className="mt-2">
               <p className="text-sm text-gray-500">Description:</p>
-              <p className="text-sm text-gray-900">{formData.description}</p>
+              <p className="text-sm text-gray-900">{basic.description}</p>
             </div>
           </div>
-          
+
           {includeRepository && (
             <div>
               <h4 className="font-medium text-gray-900">Repository</h4>
               <dl className="mt-2 text-sm">
-                <div className="flex justify-between py-1">
-                  <dt className="text-gray-500">Type:</dt>
-                  <dd className="text-gray-900">{repository.type}</dd>
-                </div>
-                <div className="flex justify-between py-1">
-                  <dt className="text-gray-500">URL:</dt>
-                  <dd className="text-gray-900 break-all">{repository.url}</dd>
-                </div>
-                {repository.branch && (
-                  <div className="flex justify-between py-1">
-                    <dt className="text-gray-500">Branch:</dt>
-                    <dd className="text-gray-900">{repository.branch}</dd>
-                  </div>
-                )}
+                <div className="flex justify-between py-1"><dt className="text-gray-500">Source:</dt><dd className="text-gray-900">{repository.source}</dd></div>
+                <div className="flex justify-between py-1"><dt className="text-gray-500">URL:</dt><dd className="text-gray-900 break-all">{repository.url}</dd></div>
               </dl>
             </div>
           )}
-          
+
           {includePackages && packages.length > 0 && (
             <div>
               <h4 className="font-medium text-gray-900">Packages ({packages.length})</h4>
               <div className="mt-2 space-y-2">
                 {packages.map((pkg, index) => (
                   <div key={index} className="text-sm">
-                    <span className="text-gray-500">{pkg.registry}:</span>
-                    <span className="text-gray-900 ml-1">{pkg.identifier}@{pkg.version}</span>
+                    <span className="text-gray-500">{pkg.registryType}:</span>
+                    <span className="text-gray-900 ml-1">{pkg.identifier}@{pkg.version} ({pkg.transport.type})</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          
-          {includeRemote && (
+
+          {includeRemotes && remotes.length > 0 && (
             <div>
-              <h4 className="font-medium text-gray-900">Remote Configuration</h4>
-              <dl className="mt-2 text-sm">
-                <div className="flex justify-between py-1">
-                  <dt className="text-gray-500">Transport:</dt>
-                  <dd className="text-gray-900">{remote.transport}</dd>
-                </div>
-                {remote.url && (
-                  <div className="flex justify-between py-1">
-                    <dt className="text-gray-500">URL:</dt>
-                    <dd className="text-gray-900 break-all">{remote.url}</dd>
+              <h4 className="font-medium text-gray-900">Remotes ({remotes.length})</h4>
+              <div className="mt-2 space-y-2">
+                {remotes.map((remote, index) => (
+                  <div key={index} className="text-sm">
+                    <span className="text-gray-500">{remote.type}:</span>
+                    <span className="text-gray-900 ml-1 break-all">{remote.url}</span>
                   </div>
-                )}
-                {remote.host && (
-                  <div className="flex justify-between py-1">
-                    <dt className="text-gray-500">Host:</dt>
-                    <dd className="text-gray-900">{remote.host}:{remote.port}</dd>
-                  </div>
-                )}
-              </dl>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -513,29 +422,31 @@ export function PublishServerPage() {
   );
 
   const steps = [
-    { id: 1, name: 'Basic Info', description: 'Server name, version, and description' },
-    { id: 2, name: 'Repository', description: 'Source code repository (optional)' },
-    { id: 3, name: 'Packages', description: 'Installation packages (optional)' },
-    { id: 4, name: 'Remote Config', description: 'Connection details (optional)' },
-    { id: 5, name: 'Review', description: 'Review and publish' }
+    { id: 1, name: 'Basic Info', description: 'Name, version, description' },
+    { id: 2, name: 'Repository', description: 'Source repository (optional)' },
+    { id: 3, name: 'Packages', description: 'Install packages (optional)' },
+    { id: 4, name: 'Remotes', description: 'Remote endpoints (optional)' },
+    { id: 5, name: 'Review', description: 'Review and publish' },
   ];
 
-  const isStepValid = (step: number) => {
+  const hasPackageOrRemote = (includePackages && packages.length > 0) || (includeRemotes && remotes.length > 0);
+
+  const isStepValid = (step: number): boolean => {
     switch (step) {
       case 1:
-        return formData.name && formData.version && formData.description.length >= 10;
+        return Boolean(basic.name && basic.version && basic.description.length >= 1);
       case 2:
-        return !includeRepository || repository.url;
+        return !includeRepository || Boolean(repository.url);
       case 3:
-        return !includePackages || packages.every(pkg => pkg.identifier && pkg.version);
-      case 4:
-        return !includeRemote || (
-          (remote.transport === 'stdio') || 
-          (remote.transport === 'tcp' && remote.host && remote.port) ||
-          (['http', 'https', 'websocket'].includes(remote.transport) && remote.url)
+        return !includePackages || packages.every(pkg =>
+          pkg.identifier && pkg.version &&
+          (pkg.registryType === 'oci' || pkg.registryType === 'mcpb' || Boolean(pkg.registryBaseUrl)) &&
+          (pkg.transport.type === 'stdio' || Boolean(pkg.transport.url))
         );
+      case 4:
+        return (!includeRemotes || remotes.every(r => Boolean(r.url))) && hasPackageOrRemote;
       case 5:
-        return true;
+        return hasPackageOrRemote;
       default:
         return false;
     }
@@ -544,9 +455,7 @@ export function PublishServerPage() {
   return (
     <div>
       <div className="flex items-center space-x-4 mb-6">
-        <Link to="/servers" className="btn-secondary">
-          ← Back to Servers
-        </Link>
+        <Link to="/servers" className="btn-secondary">← Back to Servers</Link>
         <h1 className="text-2xl font-bold text-gray-900">Publish MCP Server</h1>
       </div>
 
@@ -556,23 +465,16 @@ export function PublishServerPage() {
           <ol className="flex items-center">
             {steps.map((step, stepIdx) => (
               <li key={step.id} className={`${stepIdx !== steps.length - 1 ? 'pr-8 sm:pr-20' : ''} relative`}>
-                {/* Connector */}
                 {stepIdx !== steps.length - 1 && (
                   <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                    <div className={`h-0.5 w-full ${
-                      currentStep > step.id ? 'bg-brand-600' : 'bg-gray-200'
-                    }`} />
+                    <div className={`h-0.5 w-full ${currentStep > step.id ? 'bg-brand-600' : 'bg-gray-200'}`} />
                   </div>
                 )}
-                
-                {/* Step */}
                 <button
                   onClick={() => currentStep >= step.id && setCurrentStep(step.id)}
                   className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 ${
-                    currentStep > step.id 
-                      ? 'border-brand-600 bg-brand-600 text-white' 
-                      : currentStep === step.id 
-                      ? 'border-brand-600 bg-white text-brand-600' 
+                    currentStep > step.id ? 'border-brand-600 bg-brand-600 text-white'
+                      : currentStep === step.id ? 'border-brand-600 bg-white text-brand-600'
                       : 'border-gray-300 bg-white text-gray-500'
                   } focus:outline-none`}
                   disabled={currentStep < step.id}
@@ -581,12 +483,8 @@ export function PublishServerPage() {
                     <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
-                  ) : (
-                    <span className="text-sm font-medium">{step.id}</span>
-                  )}
+                  ) : (<span className="text-sm font-medium">{step.id}</span>)}
                 </button>
-                
-                {/* Label */}
                 <div className="absolute top-10 left-1/2 transform -translate-x-1/2 text-center w-20">
                   <p className="text-xs font-medium text-gray-900 truncate">{step.name}</p>
                   <p className="text-xs text-gray-500 truncate">{step.description}</p>
@@ -611,19 +509,17 @@ export function PublishServerPage() {
 
         {/* Navigation */}
         <div className="flex justify-between">
-          <button 
+          <button
             type="button"
             onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-            className={`btn-secondary ${
-              currentStep === 1 ? 'invisible' : ''
-            }`}
+            className={`btn-secondary ${currentStep === 1 ? 'invisible' : ''}`}
           >
             Previous
           </button>
-          
+
           <div className="space-x-3">
             {currentStep < 5 ? (
-              <button 
+              <button
                 type="button"
                 onClick={() => setCurrentStep(currentStep + 1)}
                 className="btn-primary"
@@ -633,10 +529,8 @@ export function PublishServerPage() {
               </button>
             ) : (
               <>
-                <Link to="/servers" className="btn-secondary">
-                  Cancel
-                </Link>
-                <button 
+                <Link to="/servers" className="btn-secondary">Cancel</Link>
+                <button
                   type="submit"
                   className="btn-primary"
                   disabled={publishServer.isPending || !isStepValid(currentStep)}

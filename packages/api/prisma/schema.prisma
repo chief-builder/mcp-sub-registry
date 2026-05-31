@@ -1,5 +1,6 @@
 // MCP-Compliant Prisma schema for Enterprise Sub-Registry
-// Based on official MCP Registry API specification v2025-07-09
+// Aligned with the official MCP Registry API v0.1 and the
+// server.json schema 2025-12-11.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,35 +11,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// MCP Server model - follows official MCP Registry specification
+// MCP Server model - one row per (name, version). A server name has many
+// versions; exactly one non-deleted version per name is flagged is_latest.
 model Server {
-  id           String   @id @default(cuid())
-  
-  // Core MCP fields (required)
-  name         String   @unique  // e.g., "com.company.service-name"
-  description  String
-  status       String   @default("experimental") // active, experimental, deprecated
-  version      String   
-  
-  // Repository information (optional)
-  repository   Json?    // {type: "git", url: "https://git.company.com/..."}
-  
-  // Package information (optional) 
-  packages     Json[]   @default([]) // [{registry: "npm", identifier: "@company/service", version: "1.0.0"}]
-  
-  // Remote connection details (optional)
-  remote       Json?    // {transport: "stdio", url: "npx @company/service"}
-  
-  // Extensible metadata (enterprise-specific fields via reverse DNS namespacing)
-  metadata     Json     @default("{}") // {"com.company.enterprise": {owner: "team", tier: 1, ...}}
-  
+  id                String   @id @default(cuid())
+
+  // Identity: reverse-DNS namespace + "/" + server name,
+  // e.g. "io.github.user/server-name".
+  name              String
+  version           String
+  is_latest         Boolean  @default(false)
+
+  // Core server.json fields
+  description       String
+  title             String?
+  website_url       String?
+  schema_url        String?  // the submitted "$schema" value
+  repository        Json?    // { url, source, id?, subfolder? }
+  packages          Json[]   @default([]) // spec package objects (registryType, transport, ...)
+  remotes           Json[]   @default([]) // [{ type: "streamable-http"|"sse", url, headers?, variables? }]
+
+  // Registry official status block, surfaced as
+  // _meta."io.modelcontextprotocol.registry/official"
+  registry_status   String   @default("active") // active | deprecated | deleted
+  status_message    String?
+  published_at      DateTime @default(now())
+  status_changed_at DateTime @default(now())
+
+  // Publisher-provided custom metadata (_meta namespacing)
+  metadata          Json     @default("{}")
+
   // Internal tracking fields
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
-  
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@unique([name, version])
   @@index([name])
-  @@index([status])
-  @@index([created_at])
+  @@index([registry_status])
+  @@index([is_latest])
   @@index([updated_at])
   @@map("mcp_servers")
 }

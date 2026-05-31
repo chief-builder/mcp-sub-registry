@@ -1,9 +1,7 @@
 // React import removed - JSX transform handles it
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { 
+import {
   MagnifyingGlassIcon,
-  FunnelIcon,
   UserPlusIcon,
   PencilIcon,
   TrashIcon,

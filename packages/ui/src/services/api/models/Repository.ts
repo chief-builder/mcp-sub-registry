@@ -1,13 +1,14 @@
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
+/* MCP Registry v0.1 repository (server.json 2025-12-11) */
 
 export type Repository = {
-    type: 'git' | 'mercurial' | 'svn';
     url: string;
-    branch?: string;
-    tag?: string;
-    commit?: string;
+    /**
+     * Source control host, e.g. "github".
+     */
+    source: string;
+    id?: string;
+    /**
+     * Path within the repository for monorepos.
+     */
+    subfolder?: string;
 };
-

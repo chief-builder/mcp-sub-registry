@@ -13,6 +13,10 @@ export interface AuthenticatedRequest extends Request {
     scopes: string[];
     user_id: string;
   };
+  // Effective admin privilege for the *current credential*: derived from JWT
+  // roles for token auth, or API-key scopes for key auth. Never inherit admin
+  // from the key owner's user roles.
+  is_admin?: boolean;
 }
 
 export interface JWTPayload {

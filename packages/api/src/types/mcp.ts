@@ -1,98 +1,121 @@
 /**
- * TypeScript type definitions for MCP Registry API
- * Based on the official MCP Registry API specification v2025-07-09
+ * TypeScript type definitions for the MCP Registry server.json schema.
+ * Aligned with https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json
  */
 
-// Core MCP Server schema types
-export interface MCPRepository {
-  type: string;
+export const SERVER_JSON_SCHEMA_URL =
+  'https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json';
+
+export const OFFICIAL_META_KEY = 'io.modelcontextprotocol.registry/official';
+
+export type ServerRegistryStatus = 'active' | 'deprecated' | 'deleted';
+export type PackageRegistryType = 'npm' | 'nuget' | 'pypi' | 'oci' | 'mcpb';
+export type PackageTransportType = 'stdio' | 'streamable-http' | 'sse';
+export type RemoteTransportType = 'streamable-http' | 'sse';
+
+export interface Repository {
   url: string;
+  source: string; // e.g. "github"
+  id?: string;
+  subfolder?: string;
 }
 
-export interface MCPPackage {
-  registry: string;
+export interface Transport {
+  type: PackageTransportType;
+  url?: string;
+}
+
+export interface Argument {
+  type: 'positional' | 'named';
+  name?: string;
+  value?: string;
+  valueHint?: string;
+  description?: string;
+  default?: string;
+  isRequired?: boolean;
+  isRepeated?: boolean;
+  format?: 'string' | 'number' | 'boolean' | 'filepath';
+  choices?: string[];
+}
+
+export interface EnvironmentVariable {
+  name: string;
+  description?: string;
+  default?: string;
+  isRequired?: boolean;
+  isSecret?: boolean;
+  choices?: string[];
+}
+
+export interface KeyValueInput {
+  name: string;
+  value?: string;
+  description?: string;
+  isRequired?: boolean;
+  isSecret?: boolean;
+}
+
+export interface Package {
+  registryType: PackageRegistryType;
+  registryBaseUrl?: string;
   identifier: string;
-  version?: string;
+  version: string;
+  fileSha256?: string;
+  transport: Transport;
+  runtimeHint?: string;
+  runtimeArguments?: Argument[];
+  packageArguments?: Argument[];
+  environmentVariables?: EnvironmentVariable[];
 }
 
-export interface MCPRemote {
-  transport: string;
+export interface Remote {
+  type: RemoteTransportType;
   url: string;
-  headers?: Record<string, string>;
+  headers?: KeyValueInput[];
 }
 
-export type MCPServerStatus = 'experimental' | 'beta' | 'stable' | 'deprecated';
-
-export interface MCPServer {
-  id?: string; // Only present in responses
+/** A server.json document as submitted by a publisher. */
+export interface ServerDetail {
+  $schema?: string;
   name: string;
   description: string;
+  title?: string;
   version: string;
-  status?: MCPServerStatus;
-  repository?: MCPRepository;
-  packages?: MCPPackage[];
-  remote?: MCPRemote;
-  metadata?: Record<string, any>;
+  websiteUrl?: string;
+  repository?: Repository;
+  packages?: Package[];
+  remotes?: Remote[];
+  _meta?: Record<string, any>;
 }
 
-// API request/response types
-export interface PublishServerRequest {
-  name: string;
-  description: string;
-  version: string;
-  status?: MCPServerStatus;
-  repository?: MCPRepository;
-  packages?: MCPPackage[];
-  remote?: MCPRemote;
-  metadata?: Record<string, any>;
+/** Registry-maintained status block, exposed under the official _meta key. */
+export interface OfficialMeta {
+  status: ServerRegistryStatus;
+  statusMessage?: string;
+  publishedAt: string;
+  updatedAt: string;
+  statusChangedAt?: string;
+  isLatest: boolean;
 }
 
-export interface ListServersResponse {
-  servers: MCPServer[];
-  metadata: {
-    count: number;
-    next_cursor?: string;
+/** A server.json document plus the registry's official _meta block. */
+export interface ServerResponse extends ServerDetail {
+  _meta: {
+    [OFFICIAL_META_KEY]: OfficialMeta;
+    [key: string]: any;
   };
 }
 
-export interface ListServersQuery {
-  search?: string;
-  updated_since?: string;
-  status?: MCPServerStatus;
-  cursor?: string;
-  limit?: string;
+export interface ServerListResponse {
+  servers: ServerResponse[];
+  metadata: {
+    nextCursor?: string;
+    count: number;
+  };
 }
 
 export interface HealthResponse {
   status: 'healthy' | 'unhealthy';
   timestamp: string;
   version: string;
-}
-
-export interface ErrorResponse {
-  error: string;
-  code?: string;
-}
-
-// Enterprise metadata types (using reverse DNS namespacing)
-export interface EnterpriseMetadata {
-  'com.company.enterprise'?: {
-    owner?: string;
-    tier?: number;
-    security_classification?: string;
-    cost_center?: string;
-    compliance_tags?: string[];
-  };
-  'com.company.monitoring'?: {
-    alerts_enabled?: boolean;
-    dashboard_url?: string;
-  };
-  [key: string]: any; // Allow additional namespaced metadata
-}
-
-// Internal database types (includes additional fields)
-export interface DBServer extends MCPServer {
-  id: string;
-  created_at: Date;
-  updated_at: Date;
 }

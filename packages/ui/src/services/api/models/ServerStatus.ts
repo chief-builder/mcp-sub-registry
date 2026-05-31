@@ -1,9 +1,6 @@
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
+/* MCP Registry v0.1 registry status (server.json 2025-12-11) */
 
 /**
- * Server development and deployment status
+ * Registry status of a server version.
  */
-export type ServerStatus = 'experimental' | 'beta' | 'stable' | 'deprecated';
+export type ServerStatus = 'active' | 'deprecated' | 'deleted';

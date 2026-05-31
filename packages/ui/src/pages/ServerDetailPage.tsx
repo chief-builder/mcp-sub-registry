@@ -1,20 +1,43 @@
 // React import removed - JSX transform handles it
 import { useParams, Link } from 'react-router-dom';
-import { useServer } from '../services/api/hooks/useServers';
+import { useServer, useServerVersions } from '../services/api/hooks/useServers';
 import { formatDateTime } from '../utils/date';
+import type { MCPServer } from '../services/api/models';
+import { OFFICIAL_META_KEY } from '../services/api/models';
+
+// Only http(s) URLs are safe to render as a clickable link. Anything else
+// (e.g. a stored javascript: URL) is returned as null so we render plain text.
+function safeHttpUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function statusClasses(status: string): string {
+  switch (status) {
+    case 'active': return 'bg-green-100 text-green-800';
+    case 'deprecated': return 'bg-yellow-100 text-yellow-800';
+    case 'deleted': return 'bg-red-100 text-red-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+}
 
 export function ServerDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const { data: server, isLoading, error } = useServer(id!);
-  
+  const { serverName } = useParams<{ serverName: string }>();
+  // The route param is URL-encoded (the name contains a slash).
+  const name = serverName ? decodeURIComponent(serverName) : '';
+  const { data: server, isLoading, error } = useServer(name);
+  const { data: versionsResp } = useServerVersions(name);
 
   if (isLoading) {
     return (
       <div>
         <div className="flex items-center space-x-4 mb-6">
-          <Link to="/servers" className="btn-secondary">
-            ← Back to Servers
-          </Link>
+          <Link to="/servers" className="btn-secondary">← Back to Servers</Link>
           <h1 className="text-2xl font-bold text-gray-900">Loading...</h1>
         </div>
         <div className="card">
@@ -30,9 +53,7 @@ export function ServerDetailPage() {
     return (
       <div>
         <div className="flex items-center space-x-4 mb-6">
-          <Link to="/servers" className="btn-secondary">
-            ← Back to Servers
-          </Link>
+          <Link to="/servers" className="btn-secondary">← Back to Servers</Link>
           <h1 className="text-2xl font-bold text-gray-900">Server Not Found</h1>
         </div>
         <div className="card">
@@ -48,21 +69,16 @@ export function ServerDetailPage() {
     );
   }
 
+  const official = server._meta?.[OFFICIAL_META_KEY];
+  const status = official?.status ?? 'active';
+  const versions = versionsResp?.servers ?? [];
+
   return (
     <div>
       <div className="flex items-center space-x-4 mb-6">
-        <Link to="/servers" className="btn-secondary">
-          ← Back to Servers
-        </Link>
-        <h1 className="text-2xl font-bold text-gray-900">{server.name}</h1>
-        <span className={`px-3 py-1 rounded-full text-sm ${
-          server.status === 'stable' ? 'bg-green-100 text-green-800' :
-          server.status === 'beta' ? 'bg-blue-100 text-blue-800' :
-          server.status === 'experimental' ? 'bg-yellow-100 text-yellow-800' :
-          'bg-red-100 text-red-800'
-        }`}>
-          {server.status}
-        </span>
+        <Link to="/servers" className="btn-secondary">← Back to Servers</Link>
+        <h1 className="text-2xl font-bold text-gray-900">{server.title || server.name}</h1>
+        <span className={`px-3 py-1 rounded-full text-sm ${statusClasses(status)}`}>{status}</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -76,16 +92,40 @@ export function ServerDetailPage() {
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Name</dt>
-                  <dd className="text-sm text-gray-900 mt-1">{server.name}</dd>
+                  <dd className="text-sm text-gray-900 mt-1 font-mono">{server.name}</dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Version</dt>
-                  <dd className="text-sm text-gray-900 mt-1">{server.version}</dd>
+                  <dd className="text-sm text-gray-900 mt-1">
+                    {server.version}
+                    {official?.isLatest && <span className="ml-2 text-xs text-green-700">(latest)</span>}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Status</dt>
-                  <dd className="text-sm text-gray-900 mt-1">{server.status}</dd>
+                  <dd className="text-sm text-gray-900 mt-1">
+                    {status}
+                    {official?.statusMessage && <span className="text-gray-500"> — {official.statusMessage}</span>}
+                  </dd>
                 </div>
+                {server.websiteUrl && (
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Website</dt>
+                    <dd className="text-sm text-gray-900 mt-1">
+                      {safeHttpUrl(server.websiteUrl) ? (
+                        <a href={safeHttpUrl(server.websiteUrl)!} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700">
+                          {server.websiteUrl}
+                        </a>
+                      ) : (<span>{server.websiteUrl}</span>)}
+                    </dd>
+                  </div>
+                )}
+                {official?.publishedAt && (
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Published</dt>
+                    <dd className="text-sm text-gray-900 mt-1">{formatDateTime(official.publishedAt)}</dd>
+                  </div>
+                )}
               </dl>
             </div>
           </div>
@@ -99,7 +139,7 @@ export function ServerDetailPage() {
             </div>
           </div>
 
-          {(server as any).repository && (
+          {server.repository && (
             <div className="card">
               <div className="card-header">
                 <h2 className="text-lg font-semibold">Repository</h2>
@@ -107,31 +147,48 @@ export function ServerDetailPage() {
               <div className="card-body">
                 <dl className="space-y-2">
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Type</dt>
-                    <dd className="text-sm text-gray-900">{(server as any).repository.type}</dd>
+                    <dt className="text-sm font-medium text-gray-500">Source</dt>
+                    <dd className="text-sm text-gray-900">{server.repository.source}</dd>
                   </div>
                   <div>
                     <dt className="text-sm font-medium text-gray-500">URL</dt>
                     <dd className="text-sm text-gray-900">
-                      <a href={(server as any).repository.url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700">
-                        {(server as any).repository.url}
-                      </a>
+                      {safeHttpUrl(server.repository.url) ? (
+                        <a href={safeHttpUrl(server.repository.url)!} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700">
+                          {server.repository.url}
+                        </a>
+                      ) : (<span>{server.repository.url}</span>)}
                     </dd>
                   </div>
+                  {server.repository.subfolder && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Subfolder</dt>
+                      <dd className="text-sm text-gray-900">{server.repository.subfolder}</dd>
+                    </div>
+                  )}
                 </dl>
               </div>
             </div>
           )}
 
-          {(server as any).metadata && Object.keys((server as any).metadata).length > 0 && (
+          {server.remotes && server.remotes.length > 0 && (
             <div className="card">
               <div className="card-header">
-                <h2 className="text-lg font-semibold">Metadata</h2>
+                <h2 className="text-lg font-semibold">Remotes</h2>
               </div>
-              <div className="card-body">
-                <pre className="bg-gray-50 p-4 rounded-md overflow-x-auto text-sm">
-                  {JSON.stringify((server as any).metadata, null, 2)}
-                </pre>
+              <div className="card-body space-y-3">
+                {server.remotes.map((remote, index) => (
+                  <div key={index} className="border border-gray-200 rounded p-3">
+                    <div className="font-medium text-sm">{remote.type}</div>
+                    <div className="text-sm text-gray-600 break-all">
+                      {safeHttpUrl(remote.url) ? (
+                        <a href={safeHttpUrl(remote.url)!} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700">
+                          {remote.url}
+                        </a>
+                      ) : (<span>{remote.url}</span>)}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -139,22 +196,44 @@ export function ServerDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Timestamps section removed - dates not available from API */}
-
-          {(server as any).packages && (server as any).packages.length > 0 && (
+          {server.packages && server.packages.length > 0 && (
             <div className="card">
               <div className="card-header">
                 <h2 className="text-lg font-semibold">Packages</h2>
               </div>
               <div className="card-body">
                 <div className="space-y-3">
-                  {(server as any).packages.map((pkg: any, index: number) => (
+                  {server.packages.map((pkg, index) => (
                     <div key={index} className="border border-gray-200 rounded p-3">
-                      <div className="font-medium text-sm">{pkg.registry}</div>
-                      <div className="text-sm text-gray-600">{pkg.identifier}@{pkg.version}</div>
+                      <div className="font-medium text-sm">{pkg.registryType}</div>
+                      <div className="text-sm text-gray-600 break-all">{pkg.identifier}@{pkg.version}</div>
+                      <div className="text-xs text-gray-400 mt-1">transport: {pkg.transport?.type}</div>
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {versions.length > 0 && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="text-lg font-semibold">Versions</h2>
+              </div>
+              <div className="card-body">
+                <ul className="space-y-1 text-sm">
+                  {versions.map((v: MCPServer) => {
+                    const m = v._meta?.[OFFICIAL_META_KEY];
+                    return (
+                      <li key={v.version} className="flex justify-between">
+                        <span className="text-gray-900">{v.version}</span>
+                        <span className="text-gray-500">
+                          {m?.isLatest ? 'latest' : m?.status}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             </div>
           )}

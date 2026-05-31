@@ -76,10 +76,9 @@ export function sanitizeServerName(name: string): string {
 
 export function formatServerStatus(status: ServerStatus): string {
   const statusMap: Record<ServerStatus, string> = {
-    experimental: '🧪 Experimental',
-    beta: '🔄 Beta',
-    stable: '✅ Stable',
-    deprecated: '⚠️ Deprecated'
+    active: '✅ Active',
+    deprecated: '⚠️ Deprecated',
+    deleted: '🗑️ Deleted'
   };
   return statusMap[status] || status;
 }

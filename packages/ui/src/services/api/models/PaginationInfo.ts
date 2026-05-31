@@ -1,12 +1,12 @@
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
+/* MCP Registry v0.1 list metadata (cursor pagination) */
 
 export type PaginationInfo = {
-    total: number;
-    limit: number;
-    offset: number;
-    has_more: boolean;
+    /**
+     * Total number of matching servers.
+     */
+    count: number;
+    /**
+     * Opaque cursor for the next page; absent when there are no more results.
+     */
+    nextCursor?: string;
 };
-

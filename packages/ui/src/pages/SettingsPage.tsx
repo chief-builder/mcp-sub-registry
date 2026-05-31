@@ -5,7 +5,6 @@ import {
   BellIcon,
   ShieldCheckIcon,
   ServerIcon,
-  EnvelopeIcon,
   DocumentTextIcon,
   CheckIcon,
   ExclamationTriangleIcon
@@ -25,7 +24,8 @@ export function SettingsPage() {
     requireEmailVerification: true,
     
     // Security Settings
-    adminSetupKey: 'development-admin-key-change-in-production',
+    // NOTE: the admin setup key is a server-side bootstrap secret and is
+    // intentionally NOT surfaced or editable in the client.
     sessionTimeout: 24,
     maxLoginAttempts: 5,
     passwordMinLength: 8,
@@ -54,8 +54,8 @@ export function SettingsPage() {
   });
 
   const handleSave = () => {
-    console.log('Saving settings:', settings);
-    // API call would go here
+    // TODO(Phase 2): persist via an authenticated, admin-only settings API.
+    // Until then, do not log the settings object (it may contain secrets).
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -136,17 +136,6 @@ export function SettingsPage() {
 
   const renderSecuritySettings = () => (
     <div className="space-y-6">
-      <div>
-        <label className="form-label">Admin Setup Key</label>
-        <input
-          type="password"
-          className="form-input font-mono"
-          value={settings.adminSetupKey}
-          onChange={(e) => setSettings({ ...settings, adminSetupKey: e.target.value })}
-        />
-        <p className="form-help">Required for creating admin accounts</p>
-      </div>
-
       <div>
         <label className="form-label">Session Timeout (hours)</label>
         <input

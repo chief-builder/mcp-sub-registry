@@ -27,6 +27,8 @@ const prisma = new PrismaClient({
 
 global.__PRISMA__ = prisma;
 
+let nsCounter = 0;
+
 // Test utilities
 export const testUtils = {
   /**
@@ -34,25 +36,23 @@ export const testUtils = {
    */
   createTestUser: async (overrides = {}) => {
     const userData = {
-      email: `test-${Date.now()}@example.com`,
-      username: `testuser${Date.now()}`,
+      email: `test-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`,
+      username: `testuser${Date.now()}${Math.floor(Math.random() * 1e6)}`,
       roles: ['consumer'],
       is_active: true,
       ...overrides
     };
 
-    return await prisma.user.create({
-      data: userData
-    });
+    return await prisma.user.create({ data: userData });
   },
 
   /**
    * Create a test API key for authentication
    */
-  createTestApiKey: async (userId: string, scopes: string[] = ['publish', 'read', 'write']) => {
+  createTestApiKey: async (userId: string, scopes: string[] = ['publish', 'read', 'write', 'admin']) => {
     const key = `mcp_test_${crypto.randomBytes(16).toString('hex')}`;
     const keyHash = crypto.createHash('sha256').update(key).digest('hex');
-    
+
     const apiKey = await prisma.apiKey.create({
       data: {
         key_hash: keyHash,
@@ -63,96 +63,93 @@ export const testUtils = {
         is_active: true
       }
     });
-    
+
     return { apiKey, key };
   },
 
   /**
-   * Create test user with API key for authentication
+   * Claim a namespace for a user (auto-verified, as for internal namespaces).
    */
-  createTestAuth: async (scopes: string[] = ['publish', 'read', 'write']) => {
-    const user = await testUtils.createTestUser({
-      roles: ['admin']
+  createNamespace: async (name: string, ownerId: string, authorizedUsers: string[] = []) => {
+    return await prisma.namespace.create({
+      data: {
+        name,
+        owner_id: ownerId,
+        authorized_users: authorizedUsers,
+        verification_method: 'none',
+        is_verified: true
+      }
     });
-    
+  },
+
+  /**
+   * Create a test user with an API key for authentication.
+   * By default the key has the `admin` scope, which (per the v0.1 ACL model)
+   * grants admin privileges to the credential and bypasses namespace ownership
+   * — convenient for functional tests. Pass narrower scopes to exercise the
+   * real authorization paths.
+   */
+  createTestAuth: async (scopes: string[] = ['publish', 'read', 'write', 'admin']) => {
+    const user = await testUtils.createTestUser({ roles: ['admin'] });
     const { apiKey, key } = await testUtils.createTestApiKey(user.id, scopes);
-    
+
     return {
       user,
       apiKey,
       key,
-      headers: {
-        'Authorization': `ApiKey ${key}`
-      }
+      headers: { 'Authorization': `ApiKey ${key}` }
     };
   },
 
   /**
-   * Create a test MCP server
+   * Create a test MCP server directly in the DB (v0.1 server.json shape).
    */
-  createTestServer: async (_ownerId: string, overrides = {}) => {
+  createTestServer: async (_ownerId: string, overrides: Record<string, any> = {}) => {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000);
     const serverData = {
-      name: `com.company.test-server-${timestamp}-${random}`,
+      name: `com.company/test-server-${timestamp}-${random}`,
       description: 'Test MCP server for unit testing',
-      status: 'experimental',
       version: '1.0.0',
-      repository: {
-        type: 'git',
-        url: 'https://github.com/test/server'
-      },
+      is_latest: true,
+      registry_status: 'active',
+      schema_url: 'https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json',
+      repository: { url: 'https://github.com/test/server', source: 'github' },
       packages: [{
-        registry: 'npm',
+        registryType: 'npm',
+        registryBaseUrl: 'https://registry.npmjs.org',
         identifier: '@company/test-server',
-        version: '1.0.0'
+        version: '1.0.0',
+        transport: { type: 'stdio' }
       }],
-      remote: {
-        transport: 'stdio',
-        url: 'npx @company/test-server'
-      },
+      remotes: [],
       metadata: {
-        'com.company.enterprise': {
-          owner: 'test-team',
-          tier: 2,
-          security_classification: 'internal'
-        }
+        'com.company.enterprise': { owner: 'test-team', tier: 2 }
       },
       ...overrides
     };
 
-    return await prisma.server.create({
-      data: serverData
-    });
+    return await prisma.server.create({ data: serverData });
   },
 
   /**
    * Clean up test data
    */
   cleanup: async () => {
-    // Clean up ALL servers (in test environment this is safer)
     await prisma.server.deleteMany({});
-    
-    // Clean up API keys
     await prisma.apiKey.deleteMany({});
-    
-    // Clean up users
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          contains: 'test-'
-        }
-      }
-    });
-    
-    // Clean up audit logs
+    await prisma.namespace.deleteMany({});
+    await prisma.user.deleteMany({ where: { email: { contains: 'test-' } } });
     await prisma.auditLog.deleteMany({});
   },
 
   /**
    * Wait for async operations to complete
    */
-  delay: (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+  delay: (ms: number) => new Promise(resolve => setTimeout(resolve, ms)),
+
+  /** Unique namespace string for a test. */
+  uniqueNamespace: () => `com.test${Date.now()}x${nsCounter++}`
 };
 
 // Add test utilities to global scope
@@ -160,10 +157,12 @@ declare global {
   var testUtils: {
     createTestUser: (overrides?: any) => Promise<any>;
     createTestApiKey: (userId: string, scopes?: string[]) => Promise<{ apiKey: any; key: string; }>;
+    createNamespace: (name: string, ownerId: string, authorizedUsers?: string[]) => Promise<any>;
     createTestAuth: (scopes?: string[]) => Promise<{ user: any; apiKey: any; key: string; headers: { Authorization: string; }; }>;
     createTestServer: (ownerId: string, overrides?: any) => Promise<any>;
     cleanup: () => Promise<void>;
     delay: (ms: number) => Promise<unknown>;
+    uniqueNamespace: () => string;
   };
 }
 

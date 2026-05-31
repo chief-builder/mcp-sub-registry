@@ -1,11 +1,9 @@
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
+/* MCP Registry v0.1 servers service (hand-maintained to match /v0.1 API) */
 /* tslint:disable */
 /* eslint-disable */
 import type { MCPServer } from '../models/MCPServer';
 import type { PublishServerRequest } from '../models/PublishServerRequest';
 import type { ServerListResponse } from '../models/ServerListResponse';
-import type { ServerStatus } from '../models/ServerStatus';
 
 import type { CancelablePromise } from '../core/CancelablePromise';
 import type { BaseHttpRequest } from '../core/BaseHttpRequest';
@@ -15,42 +13,33 @@ export class ServersService {
     constructor(public readonly httpRequest: BaseHttpRequest) {}
 
     /**
-     * List MCP servers
-     * Retrieve a paginated list of MCP servers with optional filtering
-     * @returns ServerListResponse List of servers retrieved successfully
-     * @throws ApiError
+     * List MCP servers (latest version of each), cursor-paginated.
      */
-    public getV0Servers({
+    public getServers({
+        cursor,
         limit = 50,
-        offset,
-        status,
         search,
+        version,
+        updatedSince,
+        includeDeleted,
     }: {
-        /**
-         * Maximum number of servers to return
-         */
+        cursor?: string,
         limit?: number,
-        /**
-         * Number of servers to skip for pagination
-         */
-        offset?: number,
-        /**
-         * Filter servers by status
-         */
-        status?: ServerStatus,
-        /**
-         * Search servers by name or description
-         */
         search?: string,
+        version?: string,
+        updatedSince?: string,
+        includeDeleted?: boolean,
     }): CancelablePromise<ServerListResponse> {
         return this.httpRequest.request({
             method: 'GET',
-            url: '/v0/servers',
+            url: '/v0.1/servers',
             query: {
+                'cursor': cursor,
                 'limit': limit,
-                'offset': offset,
-                'status': status,
                 'search': search,
+                'version': version,
+                'updated_since': updatedSince,
+                'include_deleted': includeDeleted,
             },
             errors: {
                 500: `Internal server error`,
@@ -59,24 +48,21 @@ export class ServersService {
     }
 
     /**
-     * Get server by ID
-     * Retrieve detailed information about a specific MCP server
-     * @returns MCPServer Server details retrieved successfully
-     * @throws ApiError
+     * Get the latest (or a specific) version of a server by name.
      */
-    public getV0Servers1({
-        id,
+    public getServerVersion({
+        serverName,
+        version = 'latest',
     }: {
-        /**
-         * Server unique identifier
-         */
-        id: string,
+        serverName: string,
+        version?: string,
     }): CancelablePromise<MCPServer> {
         return this.httpRequest.request({
             method: 'GET',
-            url: '/v0/servers/{id}',
+            url: '/v0.1/servers/{serverName}/versions/{version}',
             path: {
-                'id': id,
+                'serverName': serverName,
+                'version': version,
             },
             errors: {
                 404: `Server not found`,
@@ -86,26 +72,44 @@ export class ServersService {
     }
 
     /**
-     * Publish MCP server
-     * Register a new MCP server in the registry
-     * @returns MCPServer Server published successfully
-     * @throws ApiError
+     * List all versions of a server, newest first.
      */
-    public postV0Publish({
+    public getServerVersions({
+        serverName,
+    }: {
+        serverName: string,
+    }): CancelablePromise<ServerListResponse> {
+        return this.httpRequest.request({
+            method: 'GET',
+            url: '/v0.1/servers/{serverName}/versions',
+            path: {
+                'serverName': serverName,
+            },
+            errors: {
+                404: `Server not found`,
+                500: `Internal server error`,
+            },
+        });
+    }
+
+    /**
+     * Publish a new server version.
+     */
+    public publishServer({
         requestBody,
     }: {
         requestBody: PublishServerRequest,
     }): CancelablePromise<MCPServer> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/v0/publish',
+            url: '/v0.1/publish',
             body: requestBody,
             mediaType: 'application/json',
             errors: {
                 400: `Invalid request data`,
                 401: `Authentication required`,
                 403: `Insufficient permissions`,
-                409: `Server name already exists`,
+                409: `Server version already exists`,
                 429: `Rate limit exceeded`,
                 500: `Internal server error`,
             },

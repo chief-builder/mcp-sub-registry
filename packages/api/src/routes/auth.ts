@@ -1,10 +1,12 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { prisma } from '../db';
 import { logger } from '../utils/logger';
-import { config, isProduction } from '../config';
-import { 
+import { config } from '../config';
+import { authRateLimit } from '../middleware/security';
+import {
   UserRegisterRequest,
   UserLoginRequest,
   UserResponseResult,
@@ -14,14 +16,34 @@ import {
 
 const router = Router();
 
-// POST /api/v1/auth/register - Register admin user (restricted endpoint)
-router.post('/register', async (req: TypedRequest<UserRegisterRequest>, res: Response<UserResponseResult>) => {
+// Constant-time string comparison that is safe against length leaks.
+function safeEquals(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// POST /api/v1/auth/register - Bootstrap the first admin user (restricted endpoint)
+router.post('/register', authRateLimit, async (req: TypedRequest<UserRegisterRequest>, res: Response<UserResponseResult>) => {
   try {
-    // Only allow registration in development or with special admin key
-    const adminKey = req.headers['x-admin-key'];
-    
-    if (isProduction && adminKey !== config.admin.setupKey) {
-      return res.status(403).json({ 
+    // Bootstrap-only: once any user exists, registration is permanently closed.
+    // Subsequent users/services must be provisioned via authenticated admin flows.
+    const existingUsers = await prisma.user.count();
+    if (existingUsers > 0) {
+      return res.status(403).json({
+        error: 'User registration is disabled. Use API keys for service authentication.',
+        code: 'REGISTRATION_DISABLED'
+      });
+    }
+
+    // When a setup key is configured (always in production), require an exact,
+    // constant-time match of the x-admin-key header. Fails closed if either side
+    // is empty.
+    const adminKey = req.headers['x-admin-key'] as string | undefined;
+    if (config.admin.setupKey && !safeEquals(adminKey, config.admin.setupKey)) {
+      return res.status(403).json({
         error: 'User registration is disabled. Use API keys for service authentication.',
         code: 'REGISTRATION_DISABLED'
       });
@@ -73,7 +95,7 @@ router.post('/register', async (req: TypedRequest<UserRegisterRequest>, res: Res
 });
 
 // POST /api/v1/auth/login - Admin user login
-router.post('/login', async (req: TypedRequest<UserLoginRequest>, res: Response<LoginResponseResult>) => {
+router.post('/login', authRateLimit, async (req: TypedRequest<UserLoginRequest>, res: Response<LoginResponseResult>) => {
   try {
     const { email, password } = req.body;
 
@@ -136,7 +158,7 @@ router.get('/me', async (req: TypedRequest, res: Response<UserResponseResult>) =
       return res.status(401).json({ error: 'No token provided', code: 'NO_TOKEN' });
     }
 
-    const decoded = jwt.verify(token, config.jwt.secret) as jwt.JwtPayload;
+    const decoded = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {

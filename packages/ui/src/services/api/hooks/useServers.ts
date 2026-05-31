@@ -8,10 +8,11 @@ export const serverKeys = {
   lists: () => [...serverKeys.all, 'list'] as const,
   list: (filters: ServerFilters) => [...serverKeys.lists(), filters] as const,
   details: () => [...serverKeys.all, 'detail'] as const,
-  detail: (id: string) => [...serverKeys.details(), id] as const,
+  detail: (name: string) => [...serverKeys.details(), name] as const,
+  versions: (name: string) => [...serverKeys.all, 'versions', name] as const,
 };
 
-// Get all servers with filtering
+// Get servers with cursor-based filtering
 export function useServers(filters: ServerFilters = {}) {
   return useQuery({
     queryKey: serverKeys.list(filters),
@@ -20,12 +21,21 @@ export function useServers(filters: ServerFilters = {}) {
   });
 }
 
-// Get single server by ID
-export function useServer(id: string) {
+// Get the latest version of a server by name
+export function useServer(serverName: string) {
   return useQuery({
-    queryKey: serverKeys.detail(id),
-    queryFn: () => ServerService.getServer(id),
-    enabled: !!id,
+    queryKey: serverKeys.detail(serverName),
+    queryFn: () => ServerService.getServer(serverName),
+    enabled: !!serverName,
+  });
+}
+
+// Get all versions of a server by name
+export function useServerVersions(serverName: string) {
+  return useQuery({
+    queryKey: serverKeys.versions(serverName),
+    queryFn: () => ServerService.getServerVersions(serverName),
+    enabled: !!serverName,
   });
 }
 
