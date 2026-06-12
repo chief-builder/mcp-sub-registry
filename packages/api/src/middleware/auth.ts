@@ -99,6 +99,25 @@ function hasRequiredScope(userScopes: string[], requiredScopes: string[]): boole
   return requiredScopes.some(scope => userScopes.includes(scope) || userScopes.includes('admin'));
 }
 
+/**
+ * Lightweight admin check for the current request's credential, without
+ * requiring a route to be mounted behind authenticate(). Admin comes from JWT
+ * roles or API-key scopes — never from a key owner's roles.
+ */
+export async function requestIsAdmin(req: AuthenticatedRequest): Promise<boolean> {
+  const authHeader = req.headers.authorization as string | undefined;
+  if (!authHeader) return false;
+  if (authHeader.startsWith('Bearer ')) {
+    const payload = await validateJWT(authHeader.slice('Bearer '.length));
+    return !!payload && payload.roles.includes('admin');
+  }
+  if (authHeader.startsWith('ApiKey ')) {
+    const result = await validateApiKey(authHeader.slice('ApiKey '.length));
+    return !!(result.valid && result.api_key && result.api_key.scopes.includes('admin'));
+  }
+  return false;
+}
+
 export function authenticate(options: AuthenticationOptions = {}) {
   const {
     required = true,

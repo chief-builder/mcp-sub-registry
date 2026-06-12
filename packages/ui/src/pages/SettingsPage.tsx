@@ -1,6 +1,7 @@
 // React import removed - JSX transform handles it
-import { useState } from 'react';
-import { 
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
+import {
   CogIcon,
   BellIcon,
   ShieldCheckIcon,
@@ -9,10 +10,19 @@ import {
   CheckIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
+import { useSettings, useUpdateSettings } from '../services/api/hooks/useSettings';
+
+function errMessage(e: unknown): string {
+  const anyE = e as any;
+  return anyE?.body?.error || anyE?.message || 'Failed to save settings';
+}
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
   const [saved, setSaved] = useState(false);
+
+  const { data: settingsData, isLoading } = useSettings();
+  const updateSettings = useUpdateSettings();
 
   // Settings state
   const [settings, setSettings] = useState({
@@ -50,14 +60,25 @@ export function SettingsPage() {
     requireServerReview: true,
     maxServerNameLength: 255,
     maxDescriptionLength: 1000,
-    allowedServerStatuses: ['experimental', 'beta', 'stable', 'deprecated'],
+    allowedServerStatuses: ['active', 'deprecated', 'deleted'],
   });
 
-  const handleSave = () => {
-    // TODO(Phase 2): persist via an authenticated, admin-only settings API.
-    // Until then, do not log the settings object (it may contain secrets).
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  // Sync local state with the persisted settings once loaded.
+  useEffect(() => {
+    if (settingsData?.settings) {
+      setSettings((prev) => ({ ...prev, ...settingsData.settings }));
+    }
+  }, [settingsData]);
+
+  const handleSave = async () => {
+    try {
+      await updateSettings.mutateAsync(settings);
+      setSaved(true);
+      toast.success('Settings saved');
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      toast.error(errMessage(err));
+    }
   };
 
   const tabs = [
@@ -101,12 +122,13 @@ export function SettingsPage() {
             className="rounded border-gray-300 text-brand-600 focus:ring-brand-500 mr-2"
           />
           <span className="text-sm font-medium text-gray-700">Maintenance Mode</span>
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800">Enforced</span>
         </label>
         {settings.maintenanceMode && (
           <div className="ml-6 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
             <p className="text-sm text-yellow-800">
               <ExclamationTriangleIcon className="h-4 w-4 inline mr-1" />
-              When enabled, only administrators can access the site
+              When enabled, only administrators can access the API
             </p>
           </div>
         )}
@@ -364,7 +386,7 @@ export function SettingsPage() {
       <div>
         <h3 className="text-sm font-medium text-gray-700 mb-3">Allowed Server Statuses</h3>
         <div className="space-y-2">
-          {['experimental', 'beta', 'stable', 'deprecated', 'archived'].map((status) => (
+          {['active', 'deprecated', 'deleted'].map((status) => (
             <label key={status} className="flex items-center">
               <input
                 type="checkbox"
@@ -426,11 +448,25 @@ export function SettingsPage() {
               </h2>
             </div>
             <div className="card-body">
-              {activeTab === 'general' && renderGeneralSettings()}
-              {activeTab === 'security' && renderSecuritySettings()}
-              {activeTab === 'api' && renderApiSettings()}
-              {activeTab === 'notifications' && renderNotificationSettings()}
-              {activeTab === 'servers' && renderServerSettings()}
+              <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-sm text-blue-800">
+                  Settings are saved to the registry. Controls marked
+                  <span className="mx-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800">Enforced</span>
+                  are applied by the server today; the rest are stored as configuration and are
+                  <span className="font-medium"> not yet enforced</span>.
+                </p>
+              </div>
+              {isLoading ? (
+                <p className="text-center py-8 text-gray-600">Loading settings...</p>
+              ) : (
+                <>
+                  {activeTab === 'general' && renderGeneralSettings()}
+                  {activeTab === 'security' && renderSecuritySettings()}
+                  {activeTab === 'api' && renderApiSettings()}
+                  {activeTab === 'notifications' && renderNotificationSettings()}
+                  {activeTab === 'servers' && renderServerSettings()}
+                </>
+              )}
             </div>
             <div className="card-footer bg-gray-50 px-6 py-4">
               <div className="flex items-center justify-between">
@@ -443,9 +479,8 @@ export function SettingsPage() {
                   )}
                 </div>
                 <div className="flex space-x-3">
-                  <button className="btn-secondary">Reset</button>
-                  <button onClick={handleSave} className="btn-primary">
-                    Save Changes
+                  <button onClick={handleSave} className="btn-primary" disabled={isLoading || updateSettings.isPending}>
+                    {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>

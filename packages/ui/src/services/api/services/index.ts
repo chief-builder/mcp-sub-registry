@@ -7,3 +7,5 @@ export { ApiKeysService } from './ApiKeysService';
 export { AuthenticationService } from './AuthenticationService';
 export { HealthService } from './HealthService';
 export { ServersService } from './ServersService';
+export { UsersService } from './UsersService';
+export { SettingsService } from './SettingsService';
