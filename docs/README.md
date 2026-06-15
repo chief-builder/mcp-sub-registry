@@ -1,6 +1,7 @@
 # MCP Sub-Registry Documentation
 
-This monorepo contains the MCP Sub-Registry system, a service for discovering and managing Model Context Protocol (MCP) servers.
+This monorepo contains MCP Sub-Registry, a service for publishing,
+discovering, governing, and monitoring Model Context Protocol (MCP) servers.
 
 ## Repository Structure
 
@@ -13,6 +14,21 @@ mcp-sub-registry/
 ├── docs/              # Documentation
 ├── tools/             # Development tools and scripts
 └── docker/            # Docker configurations
+```
+
+## GitHub Pages
+
+The repository's GitHub Pages site is published from the `main` branch and the
+`/docs` folder.
+
+- [Project landing page](./index.html)
+- [DeepSec MCP demo](./deepsec/)
+- [DeepSec example payload](./deepsec/deepsec-server.json)
+
+Run the static page validator from the repository root before publishing:
+
+```bash
+npm run docs:check
 ```
 
 ## Quick Start
@@ -36,11 +52,12 @@ npm run build
 - [**API Documentation**](./api/) - OpenAPI specifications and endpoint details
 - [**Architecture**](./architecture/) - System design and database schema
 - [**Demo**](./demo/) - Interactive demo with sample data and walkthroughs
+- [**DeepSec Demo**](./deepsec/) - Security scanner publishing and governance demo
 - [**Deployment**](./deployment/) - Production deployment guides and configurations
 
 ## Key Features
 
-- **MCP Server Registry** - Discover and manage MCP servers
+- **MCP Server Registry** - Publish, discover, and manage MCP servers
 - **Dual Authentication** - JWT tokens for users, API keys for services
 - **Production Ready** - Docker deployment, metrics, rate limiting
 - **Modern UI** - React + TypeScript with OpenAPI-generated client

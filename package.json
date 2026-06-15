@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "MCP-compliant enterprise sub-registry with backend API and web UI",
   "private": true,
+  "homepage": "https://chief-builder.github.io/mcp-sub-registry/",
   "workspaces": [
     "packages/*"
   ],
@@ -22,6 +23,7 @@
     "clean": "npm run clean --workspaces --if-present && rimraf dist node_modules/.cache",
     "generate": "npm run generate:client",
     "generate:client": "./tools/scripts/generate-client.sh",
+    "docs:check": "node ./tools/scripts/check-docs-pages.mjs",
     "setup": "./tools/scripts/dev-setup.sh",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
@@ -48,11 +50,14 @@
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
-  "author": "Platform Team",
+  "author": "chief-builder",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/company/mcp-sub-registry.git"
+    "url": "git+https://github.com/chief-builder/mcp-sub-registry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chief-builder/mcp-sub-registry/issues"
   },
   "keywords": [
     "mcp",

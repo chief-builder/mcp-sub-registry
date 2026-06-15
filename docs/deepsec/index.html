@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DeepSec MCP Registry Demo</title>
+    <meta
+      name="description"
+      content="A standalone GitHub Pages demo showing how a DeepSec-style security scanner MCP server can be published and governed through MCP Sub-Registry."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #152132;
+        --muted: #5b6677;
+        --paper: #f6f8fb;
+        --panel: #ffffff;
+        --line: #d9e1ec;
+        --teal: #0f766e;
+        --teal-dark: #0b5f59;
+        --blue: #2563eb;
+        --amber: #b45309;
+        --rose: #be123c;
+        --green: #15803d;
+        --code: #111827;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+
+      a {
+        color: var(--teal-dark);
+        text-underline-offset: 3px;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid rgba(217, 225, 236, 0.9);
+        background: rgba(246, 248, 251, 0.94);
+        backdrop-filter: blur(14px);
+      }
+
+      .nav-inner {
+        display: flex;
+        width: min(1160px, calc(100% - 32px));
+        margin: 0 auto;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 14px 0;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--ink);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 8px;
+        color: #ffffff;
+        background: var(--rose);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 14px;
+      }
+
+      .nav-links a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .hero {
+        position: relative;
+        display: flex;
+        min-height: min(700px, 78vh);
+        align-items: flex-end;
+        overflow: hidden;
+        color: #ffffff;
+        background:
+          linear-gradient(90deg, rgba(31, 21, 34, 0.9), rgba(31, 21, 34, 0.58) 50%, rgba(31, 21, 34, 0.2)),
+          url("../screenshots/publish-step5-review.png") center / cover no-repeat;
+      }
+
+      .hero::after {
+        position: absolute;
+        inset: auto 0 0;
+        height: 38%;
+        background: linear-gradient(180deg, rgba(246, 248, 251, 0), var(--paper));
+        content: "";
+        pointer-events: none;
+      }
+
+      .hero-inner {
+        position: relative;
+        z-index: 1;
+        width: min(1160px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 92px 0 76px;
+      }
+
+      .eyebrow {
+        margin: 0 0 14px;
+        color: #fecdd3;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 840px;
+        margin: 0;
+        font-size: clamp(42px, 8vw, 76px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .lede {
+        max-width: 720px;
+        margin: 22px 0 0;
+        color: #f3e8ff;
+        font-size: 19px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 30px;
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.38);
+        border-radius: 8px;
+        padding: 10px 16px;
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.12);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .button.primary {
+        border-color: #fecdd3;
+        color: #5f0f24;
+        background: #fecdd3;
+      }
+
+      .section {
+        width: min(1160px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 50px 0;
+      }
+
+      .section h2 {
+        max-width: 800px;
+        margin: 0 0 10px;
+        font-size: 32px;
+        line-height: 1.1;
+      }
+
+      .section-intro {
+        max-width: 800px;
+        margin: 0 0 24px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .scenario-grid,
+      .governance-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .scenario,
+      .control,
+      .finding,
+      .artifact {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .scenario,
+      .control {
+        min-height: 205px;
+        padding: 20px;
+      }
+
+      .scenario code,
+      .control code {
+        display: inline-flex;
+        min-height: 32px;
+        min-width: 54px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        font-weight: 900;
+      }
+
+      .scenario code {
+        color: var(--rose);
+        background: #fff1f2;
+      }
+
+      .control code {
+        color: var(--blue);
+        background: #eef2ff;
+      }
+
+      .scenario h3,
+      .control h3,
+      .artifact h3 {
+        margin: 16px 0 8px;
+        font-size: 18px;
+      }
+
+      .scenario p,
+      .control p,
+      .artifact p,
+      .finding p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .demo-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .artifact {
+        padding: 20px;
+      }
+
+      .registry-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        overflow: hidden;
+      }
+
+      .registry-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .registry-card-body {
+        padding: 18px;
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .badge.rose {
+        color: var(--rose);
+        background: #fff1f2;
+      }
+
+      .badge.green {
+        color: var(--green);
+        background: #ecfdf5;
+      }
+
+      .badge.blue {
+        color: var(--blue);
+        background: #eff6ff;
+      }
+
+      .badge.amber {
+        color: var(--amber);
+        background: #fff7ed;
+      }
+
+      .code-panel {
+        overflow: auto;
+        border: 1px solid #263044;
+        border-radius: 8px;
+        background: var(--code);
+      }
+
+      .code-panel pre {
+        min-width: 800px;
+        margin: 0;
+        padding: 22px;
+        color: #d1fae5;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .muted-code {
+        color: #94a3b8;
+      }
+
+      .findings {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .finding {
+        min-height: 152px;
+        padding: 18px;
+      }
+
+      .finding strong {
+        display: block;
+        font-size: 30px;
+        line-height: 1;
+      }
+
+      .finding span {
+        display: block;
+        margin: 8px 0 10px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .footer {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      @media (max-width: 920px) {
+        .scenario-grid,
+        .governance-grid,
+        .demo-layout,
+        .findings {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .nav-inner {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .nav-links {
+          flex-wrap: wrap;
+        }
+
+        .hero {
+          min-height: 82vh;
+          background-position: 62% center;
+        }
+
+        .hero-inner {
+          padding: 70px 0 62px;
+        }
+
+        h1 {
+          font-size: 42px;
+        }
+
+        .lede {
+          font-size: 17px;
+        }
+
+        .scenario-grid,
+        .governance-grid,
+        .demo-layout,
+        .findings {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="brand" href="../">
+          <span class="brand-mark">D</span>
+          <span>DeepSec MCP Demo</span>
+        </a>
+        <nav class="nav-links" aria-label="Demo links">
+          <a href="../">Sub-Registry</a>
+          <a href="deepsec-server.json">Payload</a>
+          <a href="https://github.com/chief-builder/mcp-sub-registry">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-inner">
+          <p class="eyebrow">Security scanner registration scenario</p>
+          <h1>DeepSec MCP Registry Demo</h1>
+          <p class="lede">
+            A standalone walkthrough showing how a security scanner MCP server
+            can be published, reviewed, discovered, and operated through MCP
+            Sub-Registry.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="deepsec-server.json">Open Example Payload</a>
+            <a class="button" href="#workflow">View Workflow</a>
+            <a class="button" href="../">Back To Registry Site</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>What DeepSec Contributes</h2>
+        <p class="section-intro">
+          In this demo, DeepSec is modeled as a security MCP server that exposes
+          scan and findings tools to approved agent workflows. The registry
+          keeps the connector discoverable while making ownership, risk tier,
+          package metadata, and secret handling visible to platform teams.
+        </p>
+        <div class="scenario-grid">
+          <article class="scenario">
+            <code>SCAN</code>
+            <h3>Run Security Reviews</h3>
+            <p>Agents can request release scans for dependencies, containers, secrets, and static analysis findings.</p>
+          </article>
+          <article class="scenario">
+            <code>RISK</code>
+            <h3>Prioritize Findings</h3>
+            <p>Results can be grouped by policy, severity, owner, and release gate so teams focus on the work that blocks shipping.</p>
+          </article>
+          <article class="scenario">
+            <code>GOV</code>
+            <h3>Govern The Tool</h3>
+            <p>The registry captures approval requirement, product-security ownership, high-risk classification, and secret-marked headers.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="workflow" class="section">
+        <h2>Registry Workflow</h2>
+        <p class="section-intro">
+          The same sub-registry primitives work for ordinary productivity
+          connectors and sensitive security tools. DeepSec adds a higher bar for
+          review, but the publication shape remains consistent.
+        </p>
+        <div class="demo-layout">
+          <div class="registry-card">
+            <img src="../screenshots/publish-step5-review.png" alt="Registry publish review screen" />
+            <div class="registry-card-body">
+              <h3>Review Before Publication</h3>
+              <p>
+                The publisher confirms name, package source, remote transport,
+                secret headers, owner metadata, and risk classification before
+                the entry becomes discoverable.
+              </p>
+              <div class="badges">
+                <span class="badge rose">approval required</span>
+                <span class="badge amber">high risk</span>
+                <span class="badge blue">streamable-http</span>
+                <span class="badge green">npm package</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="code-panel">
+            <pre><span class="muted-code"># publish DeepSec to the registry</span>
+http POST :3010/v0/servers \
+  Authorization:"ApiKey $PUBLISHER_KEY" \
+  @docs/deepsec/deepsec-server.json
+
+<span class="muted-code"># discover approved security tools</span>
+http GET ":3010/v0/servers?search=security"
+
+<span class="muted-code"># example registry identity</span>
+name: io.deepsec/security-scanner
+title: DeepSec Security Scanner
+version: 1.4.2
+owner: product-security
+riskTier: high
+approvalRequired: true</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Discovery Card</h2>
+        <p class="section-intro">
+          Consumers see a governed registry entry instead of a loose tool name.
+          The metadata tells them what the connector does, how it is packaged,
+          which team owns it, and why it carries additional approval controls.
+        </p>
+        <div class="demo-layout">
+          <article class="artifact">
+            <h3>io.deepsec/security-scanner</h3>
+            <p>
+              Runs application security scans and returns prioritized findings
+              for code, dependency, container, and secret exposure reviews.
+            </p>
+            <div class="badges">
+              <span class="badge green">active</span>
+              <span class="badge blue">@deepsec/mcp-security-scanner</span>
+              <span class="badge amber">enterprise-baseline</span>
+              <span class="badge rose">secret headers</span>
+            </div>
+            <p>
+              Package transport is stdio for local execution, with an optional
+              streamable HTTP remote for centrally hosted scanning.
+            </p>
+          </article>
+          <div class="code-panel">
+            <pre>{
+  "name": "io.deepsec/security-scanner",
+  "title": "DeepSec Security Scanner",
+  "version": "1.4.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@deepsec/mcp-security-scanner",
+      "transport": { "type": "stdio" }
+    }
+  ],
+  "_meta": {
+    "com.example.owner": "product-security",
+    "com.example.riskTier": "high",
+    "com.example.approvalRequired": true
+  }
+}</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Governance Signals</h2>
+        <p class="section-intro">
+          Security-oriented MCP servers need clear operational signals before
+          agents call them. The registry entry documents those signals in a
+          predictable place.
+        </p>
+        <div class="governance-grid">
+          <article class="control">
+            <code>OWN</code>
+            <h3>Named Owner</h3>
+            <p>Product Security owns review, escalation, and lifecycle status for the connector.</p>
+          </article>
+          <article class="control">
+            <code>KEY</code>
+            <h3>Secret Inputs</h3>
+            <p>API tokens and authorization headers are marked as secret so clients can avoid logging or displaying values.</p>
+          </article>
+          <article class="control">
+            <code>POL</code>
+            <h3>Policy Profiles</h3>
+            <p>Environment choices expose baseline, strict-release, and audit-only modes for different workflows.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Example Findings Snapshot</h2>
+        <p class="section-intro">
+          This demo is static, but it shows the kind of result summary a DeepSec
+          MCP server could return to an agent after a scan.
+        </p>
+        <div class="findings">
+          <article class="finding">
+            <strong>3</strong>
+            <span>Critical</span>
+            <p>Release-blocking secret and dependency findings.</p>
+          </article>
+          <article class="finding">
+            <strong>12</strong>
+            <span>High</span>
+            <p>Container and static-analysis issues for service owners.</p>
+          </article>
+          <article class="finding">
+            <strong>28</strong>
+            <span>Medium</span>
+            <p>Backlog findings routed to owning teams.</p>
+          </article>
+          <article class="finding">
+            <strong>4</strong>
+            <span>Policies</span>
+            <p>Mapped controls for secrets, dependencies, images, and source code.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="section">
+        DeepSec is presented here as an example security scanner integration for
+        demonstrating MCP Sub-Registry governance workflows.
+      </div>
+    </footer>
+  </body>
+</html>
