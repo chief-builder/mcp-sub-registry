@@ -8,7 +8,6 @@ layer, React administration UI, OpenAPI contract, demo scripts, and static
 GitHub Pages documentation.
 
 - Project site: https://chief-builder.github.io/mcp-sub-registry/
-- DeepSec demo: https://chief-builder.github.io/mcp-sub-registry/deepsec/
 - Repository: https://github.com/chief-builder/mcp-sub-registry
 
 ## Why It Exists
@@ -110,9 +109,7 @@ The repository includes two demo layers:
 
 - `docs/demo/` contains a command-line HTTPie walkthrough for authentication,
   API keys, server publishing, discovery, monitoring, and cleanup.
-- `docs/deepsec/` is a standalone GitHub Pages demo showing how a DeepSec-style
-  security scanner MCP server can be published and governed through the
-  registry.
+- `docs/index.html` is the GitHub Pages landing page for the project.
 
 Run the scripted API demo after the API and database are available:
 
@@ -161,8 +158,7 @@ GitHub Pages is designed to publish from the repository's `main` branch and
 Important static entry points:
 
 - `docs/index.html` - project landing page
-- `docs/deepsec/index.html` - DeepSec security scanner demo
-- `docs/deepsec/deepsec-server.json` - example registry payload
+- `docs/demo/` - scripted enterprise integration demo and walkthrough
 
 Validate the Pages files before publishing:
 

@@ -11,19 +11,9 @@ const pages = [
     requiredText: [
       '<title>MCP Sub-Registry</title>',
       'MCP Sub-Registry',
-      'Open DeepSec Demo',
+      'Read Walkthrough',
       'screenshots/02-dashboard.png',
       'screenshots/03-server-listing.png',
-    ],
-  },
-  {
-    file: 'docs/deepsec/index.html',
-    requiredText: [
-      '<title>DeepSec MCP Registry Demo</title>',
-      'DeepSec MCP Registry Demo',
-      'deepsec-server.json',
-      '../screenshots/publish-step5-review.png',
-      'io.deepsec/security-scanner',
     ],
   },
 ];
@@ -83,22 +73,6 @@ for (const page of pages) {
       fail(`${page.file} references missing local asset or page: ${ref}`);
     }
   }
-}
-
-const payloadPath = resolve(repoRoot, 'docs/deepsec/deepsec-server.json');
-assertExists('docs/deepsec/deepsec-server.json');
-
-const payload = JSON.parse(readFileSync(payloadPath, 'utf8'));
-const payloadChecks = [
-  payload.name === 'io.deepsec/security-scanner',
-  payload.version === '1.4.2',
-  Array.isArray(payload.packages) && payload.packages[0]?.registryType === 'npm',
-  Array.isArray(payload.remotes) && payload.remotes[0]?.type === 'streamable-http',
-  payload._meta?.['com.example.approvalRequired'] === true,
-];
-
-if (payloadChecks.some((passed) => !passed)) {
-  fail('docs/deepsec/deepsec-server.json does not match the expected DeepSec demo payload');
 }
 
 if (!process.exitCode) {

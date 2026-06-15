@@ -22,8 +22,7 @@ The repository's GitHub Pages site is published from the `main` branch and the
 `/docs` folder.
 
 - [Project landing page](./index.html)
-- [DeepSec MCP demo](./deepsec/)
-- [DeepSec example payload](./deepsec/deepsec-server.json)
+- [Demo walkthrough](./demo/)
 
 Run the static page validator from the repository root before publishing:
 
@@ -52,7 +51,6 @@ npm run build
 - [**API Documentation**](./api/) - OpenAPI specifications and endpoint details
 - [**Architecture**](./architecture/) - System design and database schema
 - [**Demo**](./demo/) - Interactive demo with sample data and walkthroughs
-- [**DeepSec Demo**](./deepsec/) - Security scanner publishing and governance demo
 - [**Deployment**](./deployment/) - Production deployment guides and configurations
 
 ## Key Features
